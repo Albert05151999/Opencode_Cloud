@@ -1,0 +1,8 @@
+{
+  "name": "cloud-agent-opencode",
+  "version": "0.1.0",
+  "private": true,
+  "dependencies": {
+    "opencode-ai": "1.18.29"
+  }
+}

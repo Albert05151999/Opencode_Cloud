@@ -1,0 +1,13 @@
+numpy
+pandas
+matplotlib
+openpyxl
+xlsxwriter
+python-pptx
+python-docx
+pillow
+pyyaml
+markdown
+tabulate
+requests
+httpx

@@ -1,0 +1,75 @@
+model_list:
+  - model_name: coding-fast
+    litellm_params: &coding_fast_1
+      model: os.environ/CODING_FAST_MODEL
+      api_base: os.environ/CODING_FAST_1_API_BASE
+      api_key: os.environ/CODING_FAST_API_KEY
+    model_info:
+      id: coding-fast-1
+  - model_name: coding-fast
+    litellm_params:
+      <<: *coding_fast_1
+      api_base: os.environ/CODING_FAST_2_API_BASE
+    model_info:
+      id: coding-fast-2
+
+  - model_name: coding-quality
+    litellm_params: &coding_quality_1
+      model: os.environ/CODING_QUALITY_MODEL
+      api_base: os.environ/CODING_QUALITY_1_API_BASE
+      api_key: os.environ/CODING_QUALITY_API_KEY
+    model_info:
+      id: coding-quality-1
+  - model_name: coding-quality
+    litellm_params:
+      <<: *coding_quality_1
+      api_base: os.environ/CODING_QUALITY_2_API_BASE
+    model_info:
+      id: coding-quality-2
+
+  - model_name: data-fast
+    litellm_params: &data_fast_1
+      model: os.environ/DATA_FAST_MODEL
+      api_base: os.environ/DATA_FAST_1_API_BASE
+      api_key: os.environ/DATA_FAST_API_KEY
+    model_info:
+      id: data-fast-1
+  - model_name: data-fast
+    litellm_params:
+      <<: *data_fast_1
+      api_base: os.environ/DATA_FAST_2_API_BASE
+    model_info:
+      id: data-fast-2
+
+  - model_name: data-quality
+    litellm_params: &data_quality_1
+      model: os.environ/DATA_QUALITY_MODEL
+      api_base: os.environ/DATA_QUALITY_1_API_BASE
+      api_key: os.environ/DATA_QUALITY_API_KEY
+    model_info:
+      id: data-quality-1
+  - model_name: data-quality
+    litellm_params:
+      <<: *data_quality_1
+      api_base: os.environ/DATA_QUALITY_2_API_BASE
+    model_info:
+      id: data-quality-2
+
+router_settings:
+  routing_strategy: least-busy
+  num_retries: 2
+  timeout: 600
+  allowed_fails: 1
+  cooldown_time: 30
+
+litellm_settings:
+  callbacks:
+    - prometheus
+    - cloud_logging.cloud_logger
+  prometheus_emit_stream_label: true
+  require_auth_for_metrics_endpoint: false
+  drop_params: true
+
+general_settings:
+  disable_spend_logs: true
+

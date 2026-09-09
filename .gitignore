@@ -1,0 +1,16 @@
+# Generated reports, downloads, backups and offline image bundles.
+# Recreate release bundles with scripts/build-from-source.sh.
+artifacts/
+.venv/
+.venv-controller/
+__pycache__/
+*.pyc
+.env
+.venv-web/
+.venv-build/
+.pytest_cache/
+*.egg-info/
+web/node_modules/
+web/dist/
+web/test-results/
+web/playwright-report/

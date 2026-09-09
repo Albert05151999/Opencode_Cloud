@@ -1,0 +1,40 @@
+services:
+  model-gateway:
+    image: ghcr.io/berriai/litellm:v1.98.0@sha256:20b5044b619055374061a6d5b7b08754cad75aeabbf82ddf4f69cc0cf80ddaf4
+    command: ["--config", "/app/config.yaml", "--port", "4000"]
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:4001:4000"
+      - "${MODEL_GATEWAY_BRIDGE_IP:?use scripts/model-gateway.sh}:4001:4000"
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    volumes:
+      - ../config/litellm_config.yaml:/app/config.yaml:ro
+      - ./cloud_logging.py:/app/cloud_logging.py:ro
+    environment:
+      CODING_FAST_API_KEY: ${CODING_FAST_API_KEY:?set CODING_FAST_API_KEY}
+      CODING_QUALITY_API_KEY: ${CODING_QUALITY_API_KEY:?set CODING_QUALITY_API_KEY}
+      DATA_FAST_API_KEY: ${DATA_FAST_API_KEY:?set DATA_FAST_API_KEY}
+      DATA_QUALITY_API_KEY: ${DATA_QUALITY_API_KEY:?set DATA_QUALITY_API_KEY}
+      CODING_FAST_MODEL: ${CODING_FAST_MODEL:?set CODING_FAST_MODEL}
+      CODING_FAST_1_API_BASE: ${CODING_FAST_1_API_BASE:?set CODING_FAST_1_API_BASE}
+      CODING_FAST_2_API_BASE: ${CODING_FAST_2_API_BASE:?set CODING_FAST_2_API_BASE}
+      CODING_QUALITY_MODEL: ${CODING_QUALITY_MODEL:?set CODING_QUALITY_MODEL}
+      CODING_QUALITY_1_API_BASE: ${CODING_QUALITY_1_API_BASE:?set CODING_QUALITY_1_API_BASE}
+      CODING_QUALITY_2_API_BASE: ${CODING_QUALITY_2_API_BASE:?set CODING_QUALITY_2_API_BASE}
+      DATA_FAST_MODEL: ${DATA_FAST_MODEL:?set DATA_FAST_MODEL}
+      DATA_FAST_1_API_BASE: ${DATA_FAST_1_API_BASE:?set DATA_FAST_1_API_BASE}
+      DATA_FAST_2_API_BASE: ${DATA_FAST_2_API_BASE:?set DATA_FAST_2_API_BASE}
+      DATA_QUALITY_MODEL: ${DATA_QUALITY_MODEL:?set DATA_QUALITY_MODEL}
+      DATA_QUALITY_1_API_BASE: ${DATA_QUALITY_1_API_BASE:?set DATA_QUALITY_1_API_BASE}
+      DATA_QUALITY_2_API_BASE: ${DATA_QUALITY_2_API_BASE:?set DATA_QUALITY_2_API_BASE}
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:4000/health/liveliness', timeout=2)"]
+      interval: 10s
+      timeout: 3s
+      retries: 6
+      start_period: 30s
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
