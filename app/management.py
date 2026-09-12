@@ -165,7 +165,7 @@ def validate_mcp(data):
 
 def validate_model(model):
     identifier(model.get('id'))
-    allowed = {'id', 'name', 'provider', 'upstream_model', 'base_url', 'api_key', 'headers',
+    allowed = {'id', 'name', 'provider', 'upstream_model', 'base_url', 'additional_base_urls', 'api_key', 'headers',
                'parameters', 'context', 'output', 'enabled', 'legacy'}
     if set(model) - allowed:
         fail('Unsupported model fields: ' + ', '.join(sorted(set(model) - allowed)))
@@ -177,6 +177,15 @@ def validate_model(model):
         url = urlparse(model['base_url'])
         if url.scheme not in {'http', 'https'} or not url.hostname or url.username or url.password:
             fail('Model URL must be HTTP(S), without embedded credentials')
+    alternatives = model.get('additional_base_urls', [])
+    if not isinstance(alternatives, list) or len(alternatives)>7:
+        fail('At most seven equivalent additional endpoints are supported')
+    for base in alternatives:
+        if not isinstance(base,str):
+            fail('Additional endpoints must be URLs')
+        url = urlparse(base)
+        if url.scheme not in {'http','https'} or not url.hostname or url.username or url.password:
+            fail('Additional model URL must be HTTP(S), without embedded credentials')
     parameters = model.get('parameters', {})
     if not isinstance(parameters, dict) or set(parameters) - MODEL_PARAMETERS:
         fail('Unsupported model parameters')
@@ -203,7 +212,32 @@ class ManagementStore:
             db.execute('CREATE TABLE IF NOT EXISTS catalog (id INTEGER PRIMARY KEY CHECK(id=1), revision INTEGER NOT NULL, document TEXT NOT NULL)')
             db.execute('INSERT OR IGNORE INTO catalog VALUES (1,0,?)', (json.dumps({'models': {}, 'resources': {}, 'agents': {}, 'jobs': {}, 'gateway_versions': [], 'gateway_active': None}),))
         self.path.chmod(0o600)
+        self.migrate()
         self.bootstrap()
+
+    def migrate(self):
+        with self.connect() as db:
+            version = db.execute('PRAGMA user_version').fetchone()[0]
+            if version > 1:
+                fail('Management database was created by a newer server', 409)
+            if version == 1:
+                return
+            backup_root = self.root / 'migrations'
+            backup_root.mkdir(exist_ok=True, mode=0o700)
+            backup = backup_root / ('catalog-v0-' + uuid.uuid4().hex + '.sqlite')
+            with sqlite3.connect(backup) as destination:
+                db.backup(destination)
+            backup.chmod(0o600)
+            db.execute('BEGIN IMMEDIATE')
+            revision, document = db.execute('SELECT revision,document FROM catalog WHERE id=1').fetchone()
+            data = json.loads(document)
+            data.setdefault('agent_tombstones', {})
+            data.setdefault('sandbox_operations', {})
+            data.setdefault('bootstrapped', bool(data['agents']))
+            for agent in data['agents'].values():
+                agent.setdefault('lifecycle', 'active')
+            db.execute('UPDATE catalog SET revision=?,document=? WHERE id=1', (revision + 1, json.dumps(data)))
+            db.execute('PRAGMA user_version = 1')
 
     def connect(self):
         db = sqlite3.connect(self.path, timeout=15)
@@ -241,8 +275,9 @@ class ManagementStore:
 
     def bootstrap(self):
         with self.edit() as data:
-            if data['agents']:
+            if data.get('bootstrapped'):
                 return
+            data['bootstrapped'] = True
             for config in sorted(self.agents_root.glob('*/agent.cfg')):
                 cfg = configparser.ConfigParser(interpolation=None)
                 cfg.read(config, encoding='utf-8')
@@ -327,6 +362,12 @@ class ManagementStore:
     def save_agent(self, aid, value, expected=None, source=None):
         identifier(aid)
         with self.edit(expected) as data:
+            if aid in data.get('agent_tombstones', {}):
+                fail('This Agent ID was retired; choose a new ID', 409)
+            if data['agents'].get(aid, {}).get('lifecycle') == 'deleting' or (source and data['agents'].get(source, {}).get('lifecycle') == 'deleting'):
+                fail('Agent deletion is in progress', 409)
+            if any(j['status'] in {'queued', 'validating', 'waiting', 'applying'} and j['target'] in {aid, '*'} for j in data['jobs'].values()):
+                fail('An operation affects this Agent; wait before editing', 409)
             if source:
                 if aid in data['agents'] or source not in data['agents']:
                     fail('Invalid copy source or destination', 409)
@@ -403,11 +444,18 @@ class ManagementStore:
             resource['versions'].append({'version': version, 'created': time.time(), **copy.deepcopy(checked_draft)})
             return version
 
-    def public_catalog(self):
+    def public_catalog(self, compact=False):
         revision, data = self.read()
         result = {'revision': revision, **redact(data)}
         for mid, model in result['models'].items():
             model['references'] = self.model_references(data, mid)
+        if compact:
+            result['jobs'] = dict(sorted(result['jobs'].items(),key=lambda item:item[1]['created'],reverse=True)[:25])
+            for agent in result['agents'].values():
+                agent['versions'] = [{k:v[k] for k in ('version','created') if k in v} for v in agent['versions']]
+            for resource in result['resources'].values():
+                resource['versions'] = [{k:v[k] for k in ('version','created') if k in v} for v in resource['versions']]
+            result['gateway_versions'] = [{k:v[k] for k in ('version','created') if k in v} for v in result['gateway_versions']]
         return result
 
     def new_job(self, kind, target, payload=None):
@@ -419,4 +467,9 @@ class ManagementStore:
 
     def job(self, jid, **updates):
         with self.edit() as data:
+            if data['jobs'][jid]['status'] == 'cancelled':
+                if updates.get('status') in {'validating','waiting','applying'}:
+                    from app.job_coordinator import JobCancelled
+                    raise JobCancelled()
+                return
             data['jobs'][jid].update(updates, updated=time.time())

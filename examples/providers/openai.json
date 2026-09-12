@@ -1,0 +1,16 @@
+{
+  "provider": {
+    "openai": {
+      "npm": "@ai-sdk/openai",
+      "options": {
+        "baseURL": "https://api.openai.com/v1",
+        "apiKey": "{env:OPENAI_API_KEY}"
+      },
+      "models": {
+        "gpt-4.1": {
+          "name": "OpenAI"
+        }
+      }
+    }
+  }
+}

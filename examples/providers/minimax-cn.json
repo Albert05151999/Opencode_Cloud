@@ -1,0 +1,16 @@
+{
+  "provider": {
+    "minimax-cn": {
+      "npm": "@ai-sdk/openai-compatible",
+      "options": {
+        "baseURL": "https://api.minimaxi.com/v1",
+        "apiKey": "{env:MINIMAX_CN_API_KEY}"
+      },
+      "models": {
+        "MiniMax-M3": {
+          "name": "MiniMax · 国内"
+        }
+      }
+    }
+  }
+}

@@ -1,6 +1,10 @@
 # OpenCode 云端 Agent 平台
 
-当前版本为 0.2.2，包含本地聊天和配置管理页。全新 clone 请先按 [源码构建说明](docs/build-from-source.md) 生成镜像与 Web 包；构建不依赖旧版发布目录或备份。完成前端构建后，可在 Windows 项目根目录运行：
+[最新进度（2026-09-12）](项目进度.md) | [完整部署指南](部署指南.md) | [管理运维](docs/management-operations.md) | [原 0.3.0 交付验收](docs/release-0.3.0-assessment.md) | [0.2.2 升级](docs/upgrade-0.3.0.md)
+
+新增源码功能：[自动压测](docs/load-testing.md)（管理 → 压测）：选择现有 Agent、模拟用户数和每沙箱 CPU/内存，同步发起固定会话，生成报告并手动清理测试数据。显示服务器 CPU/内存状态与可分配余量，超预算禁止启动，准备期间持续复查。[实施清单](06-load_testing_todolist.md)。旧版 ZIP 不含本次新增功能，需重新构建。
+
+当前版本为 0.3.0，包含本地聊天和配置管理页。全新 clone 请先按 [源码构建说明](docs/build-from-source.md) 生成镜像与 Web 包；构建不依赖旧版发布目录或备份。完成前端构建后，可在 Windows 项目根目录运行：
 
 ```powershell
 powershell -ExecutionPolicy Bypass -File .\start-web.ps1
@@ -8,11 +12,11 @@ powershell -ExecutionPolicy Bypass -File .\start-web.ps1
 
 默认打开 `http://127.0.0.1:18765/chat`。支持模型导入、Agent 模型分配、MCP 表单、Skill 附件和 Hook 编辑、版本发布与回滚。发布的 Web ZIP 内含编译页面，日常无需 Node.js；源码仓库不提交编译产物。服务器与 Web 使用对应版本，并在连接设置填写管理员凭据。
 
-完整 PowerShell 上传、Ubuntu 部署和使用步骤见 [Web 部署说明](docs/web-readme.md)，规划及完成记录见 [04-user_manager_web.md](04-user_manager_web.md)。交付包位于 `artifacts/release/web-v0.2.2/`，本地 Web 包与服务器离线镜像包分开提供。
+完整 PowerShell 上传、Ubuntu 部署和使用步骤见 [Web 部署说明](docs/web-readme.md)，规划及完成记录见 [04-user_manager_web.md](04-user_manager_web.md)。交付包位于 `artifacts/release/web-v0.3.0/`，本地 Web 包与服务器离线镜像包分开提供。
 
 远端执行客户端：安装 `httpx` 后运行 `python scripts/sse-chat.py --base-url http://服务器IP:18080`，实时显示远端回答和工具状态。当前工作区客户端已配置本次验证的服务器地址。新部署默认监听 `0.0.0.0:18080`，已有实例可通过安装器 `--host/--port` 显式迁移。离线网络修订包及访问边界见 [网络部署说明](docs/network-release-readme.md)。
 
-当前实现按 `03_zero_to_one_todolist.md` 的顺序推进。架构、API 契约、构建思路和机器可读进度分别位于根目录设计文档、`docs/build-and-verification.md` 与 `docs/progress.json`。
+基础平台、本地 Web、管理运维和自动压测分别记录在 03～06 阶段文档。当前实现、验证与待交付项统一见 [项目进度](项目进度.md)；机器可读进度见 `docs/progress.json`。管理页已支持 Agent 归档/删除、沙箱搜索/重启/自动恢复，以及先入资源池再分配的配置导入导出。
 
 开发控制器环境：
 

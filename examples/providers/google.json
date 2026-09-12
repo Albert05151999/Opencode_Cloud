@@ -1,0 +1,16 @@
+{
+  "provider": {
+    "google": {
+      "npm": "@ai-sdk/google",
+      "options": {
+        "baseURL": "https://generativelanguage.googleapis.com",
+        "apiKey": "{env:GOOGLE_API_KEY}"
+      },
+      "models": {
+        "gemini-2.5-pro": {
+          "name": "Google Gemini"
+        }
+      }
+    }
+  }
+}

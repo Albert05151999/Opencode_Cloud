@@ -45,6 +45,11 @@ class ManagementRuntime:
         self.requests = {}
         self.acquiring = {}
         self.tasks = set()
+        from app.operations import Operations
+        self.operations = Operations(self)
+        from app.load_tests import LoadTests
+        self.load_tests = LoadTests(self)
+        self.backend.workspaces.user_guard = self.load_tests.resources_for
         self.backend.agent_catalog = ManagedCatalog(self)
 
     def spawn(self, coroutine):
@@ -63,6 +68,8 @@ class ManagementRuntime:
         agent = data['agents'].get(agent_id)
         if not agent:
             fail('Unknown Agent', 404)
+        if agent.get('lifecycle') == 'deleting':
+            fail('Agent deletion is pending; inspect the operation result', 409)
         active = self.store.agent_config(agent)
         if not active:
             fail('Publish this Agent before starting a session', 409)
@@ -74,8 +81,14 @@ class ManagementRuntime:
         if mutation and not abort and not response:
             if agent_id in self.blocked:
                 fail('Agent configuration is being applied; retry shortly', 503)
+            if agent.get('lifecycle') == 'archived':
+                fail('Agent is archived; restore it before generating', 409)
+            if any(j['status'] in {'queued', 'validating', 'waiting', 'applying'} and j['target'] == agent_id and j['kind'].startswith(('sandbox.', 'agent.archive', 'agent.restore', 'agent.delete')) for j in data['jobs'].values()):
+                fail('An operation is pending for this Agent; retry after completion', 409)
             if not active.get('enabled', True):
                 fail('Agent is disabled; history remains available', 409)
+            if hasattr(self, 'operations'):
+                self.operations.recovery.invalidate_idle(agent_id)
         # Platform-managed provider configuration must not be bypassed by native writes.
         if method not in {'GET', 'HEAD', 'OPTIONS'} and (path in {'config', 'global/config'} or path.startswith(('auth/', 'mcp/', 'provider/'))):
             fail('Use the versioned management API for configuration changes', 403)
@@ -361,6 +374,8 @@ if(check.status!==0)throw Error('Invalid JavaScript/TypeScript syntax'); result[
                 if model.get('headers'):
                     params['extra_headers'] = model['headers']
                 entries.append({'model_name': mid, 'litellm_params': params, 'model_info': {'id': mid}})
+                for index, base in enumerate(model.get('additional_base_urls', []), 1):
+                    entries.append({'model_name':mid, 'litellm_params':{**params,'api_base':base}, 'model_info':{'id':mid+'-extra-'+str(index)}})
         return {'model_list': entries, 'router_settings': {'routing_strategy': 'least-busy', 'num_retries': 2,
                 'timeout': 600, 'allowed_fails': 1, 'cooldown_time': 30},
                 'litellm_settings': {'callbacks': ['prometheus', 'cloud_logging.cloud_logger'], 'drop_params': False},
@@ -423,15 +438,19 @@ if(check.status!==0)throw Error('Invalid JavaScript/TypeScript syntax'); result[
                 self.blocked.difference_update(targets)
 
     async def recover(self):
+        self.load_tests.store.recover()
         _, data = self.store.read()
         for jid, job in data['jobs'].items():
             if job['status'] in {'queued', 'validating', 'waiting', 'applying'}:
+                if job['kind'].startswith(('sandbox.', 'agent.archive', 'agent.restore', 'agent.delete')):
+                    await self.operations.reconcile(jid)
+                    continue
                 if job.get('gateway_backup'):
                     import base64
                     (self.store.root / 'gateway/config.json').write_bytes(base64.b64decode(job['gateway_backup']))
                     container = await asyncio.to_thread(self.gateway_container)
                     await asyncio.to_thread(container.restart, timeout=10)
-                self.store.job(jid, status='failed', error='Interrupted by controller restart; previous version restored', gateway_backup=None)
+                self.store.job(jid, status='failed', error=('Interrupted by controller restart; inspect actual operation state before retrying' if job['kind'].startswith(('sandbox.', 'agent.archive', 'agent.restore', 'agent.delete')) else 'Interrupted by controller restart; previous version restored'), gateway_backup=None)
 
 
 def base64_text(value):

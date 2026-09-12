@@ -45,10 +45,16 @@ def main():
         # Build from checked-in sources and the current image build report.
         # No previous release archive or private deployment state is required.
         packaging.stage(target)
-        for relative in ('VERSION', '02_api_contract.md', '04-user_manager_web.md', 'scripts/sse-chat.py',
+        for relative in ('VERSION', '02_api_contract.md', '04-user_manager_web.md', '06-load_testing_todolist.md', 'scripts/sse-chat.py',
                          'deploy/manage.py', 'deploy/doctor.py', 'deploy/smoke.py'):
             packaging.copy(ROOT / relative, target / relative)
         packaging.copy(ROOT / 'docs/web-readme.md', target / 'README.md')
+        for destination in (target, local):
+            for path in (ROOT / 'examples/providers').glob('*.json'):
+                packaging.copy(path, destination / path.relative_to(ROOT))
+            for name in ('management-operations.md','provider-examples.md','upgrade-0.3.0.md','release-0.3.0-assessment.md','load-testing.md'):
+                packaging.copy(ROOT / 'docs' / name, destination / 'docs' / name)
+            packaging.copy(ROOT / '部署指南.md', destination / '部署指南.md')
         cfg = configparser.ConfigParser(interpolation=None)
         cfg.read(target / 'config/config.cfg')
         cfg['platform'].update(host='0.0.0.0', port='18080')
@@ -56,11 +62,13 @@ def main():
             cfg.write(stream)
         for relative in ('VERSION', 'start-web.ps1', 'scripts/start-web.py', 'scripts/sse-chat.py',
                          'local_web/__init__.py', 'local_web/server.py', 'local_web/importer.py', 'local_web/runtime.py',
-                         'local_web/requirements.txt', 'app/__init__.py', 'app/management.py',
-                         '02_api_contract.md', '04-user_manager_web.md'):
+                         'local_web/requirements.txt', 'local_web/resource_import.py', 'app/__init__.py', 'app/management.py',
+                         'app/import_formats.py', 'app/transfers.py',
+                         '02_api_contract.md', '04-user_manager_web.md', '05-management_operations_plan.md', '06-load_testing_todolist.md',
+                         'docs/management-operations.md'):
             packaging.copy(ROOT / relative, local / relative)
         packaging.copy(ROOT / 'docs/web-readme.md', local / 'README.md')
-        for name in (f'upgrade-{version}-verification.json', 'session-binding-verification.json', f'release-{version}-assessment.md', 'final-assessment.md', 'controller-openapi.json', 'runtime-verification.json',
+        for name in ('operations-verification.json', 'draft-model-verification.json', 'web-package-verification.json', f'upgrade-{version}-verification.json', 'session-binding-verification.json', f'release-{version}-assessment.md', 'final-assessment.md', 'controller-openapi.json', 'runtime-verification.json',
                      'upgrade-verification.json', 'windows-companion-verification.json',
                      'real-chat-desktop.png', 'real-admin-desktop.png'):
             path = ROOT / 'artifacts/web' / name

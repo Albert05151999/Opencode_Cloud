@@ -1,0 +1,65 @@
+[
+  {
+    "id": "openai",
+    "name": "OpenAI",
+    "provider": "openai",
+    "base_url": "https://api.openai.com/v1",
+    "notes": "填写控制台可用的模型 ID；平台 ID 可自定义。",
+    "docs": "https://platform.openai.com/docs/api-reference",
+    "example_model": "gpt-4.1"
+  },
+  {
+    "id": "anthropic",
+    "name": "Anthropic",
+    "provider": "anthropic",
+    "base_url": "https://api.anthropic.com",
+    "notes": "选择原生 Anthropic 适配器，不要将 /v1/messages 填入端点。",
+    "docs": "https://docs.anthropic.com/en/api/overview",
+    "example_model": "claude-sonnet-5"
+  },
+  {
+    "id": "google",
+    "name": "Google Gemini",
+    "provider": "google",
+    "base_url": "https://generativelanguage.googleapis.com",
+    "notes": "使用 Gemini API key；本模板不配置 Vertex AI 服务账户。",
+    "docs": "https://ai.google.dev/gemini-api/docs",
+    "example_model": "gemini-2.5-pro"
+  },
+  {
+    "id": "deepseek",
+    "name": "DeepSeek",
+    "provider": "openai-compatible",
+    "base_url": "https://api.deepseek.com",
+    "notes": "填写账户支持的模型 ID；使用 OpenAI-compatible 协议。",
+    "docs": "https://api-docs.deepseek.com/",
+    "example_model": "deepseek-v4-flash"
+  },
+  {
+    "id": "qwen-cn",
+    "name": "阿里云百炼 · 北京",
+    "provider": "openai-compatible",
+    "base_url": "https://dashscope.aliyuncs.com/compatible-mode/v1",
+    "notes": "地域、API key、模型 ID 必须匹配；新加坡使用 dashscope-intl.aliyuncs.com。",
+    "docs": "https://help.aliyun.com/en/model-studio/base-url",
+    "example_model": "qwen-plus"
+  },
+  {
+    "id": "zai-coding",
+    "name": "智谱 Z.AI · Coding Plan",
+    "provider": "openai-compatible",
+    "base_url": "https://api.z.ai/api/coding/paas/v4",
+    "notes": "此模板是 Coding Plan 端点，普通按量 API 请填写对应端点。",
+    "docs": "https://docs.z.ai/",
+    "example_model": "glm-5.3"
+  },
+  {
+    "id": "minimax-cn",
+    "name": "MiniMax · 国内",
+    "provider": "openai-compatible",
+    "base_url": "https://api.minimaxi.com/v1",
+    "notes": "地域和 API key 须匹配；模型 ID 使用该账户可调用的准确名称。",
+    "docs": "https://platform.minimaxi.com/docs/",
+    "example_model": "MiniMax-M3"
+  }
+]

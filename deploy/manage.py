@@ -226,7 +226,7 @@ def install(root, env_file, host=None, port=None):
         raise RuntimeError("host_requires_python_3_11_and_zstd")
     old_version = (root / 'VERSION').read_text().strip() if (root / 'VERSION').exists() else None
     new_version = (BUNDLE / 'VERSION').read_text().strip()
-    if old_version is not None and old_version != new_version and (old_version, new_version) not in {('0.1.0', '0.2.0'), ('0.1.0', '0.2.1'), ('0.2.0', '0.2.1'), ('0.1.0', '0.2.2'), ('0.2.0', '0.2.2'), ('0.2.1', '0.2.2')}:
+    if old_version is not None and old_version != new_version and (old_version, new_version) not in {('0.1.0', '0.2.0'), ('0.1.0', '0.2.1'), ('0.2.0', '0.2.1'), ('0.1.0', '0.2.2'), ('0.2.0', '0.2.2'), ('0.2.1', '0.2.2'), ('0.2.2', '0.3.0')}:
         raise RuntimeError("cross_version_upgrade_requires_explicit_migration")
     verify_checksums(BUNDLE)
     root.mkdir(parents=True, exist_ok=True)
@@ -269,7 +269,7 @@ def install(root, env_file, host=None, port=None):
             (root / ".env").chmod(0o600)
     if not (root / ".env").is_file():
         raise RuntimeError("provide_env_file_or_install_root_env")
-    if new_version in {'0.2.0', '0.2.1', '0.2.2'}:
+    if new_version in {'0.2.0', '0.2.1', '0.2.2', '0.3.0'}:
         prepare_management(root)
     render(root)
     doctor_command = [sys.executable, str(root / "deploy/doctor.py"), "--root", str(root)]

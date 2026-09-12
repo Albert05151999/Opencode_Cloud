@@ -15,6 +15,7 @@ class ModelDefinition(DTO):
     provider: Literal['openai-compatible', 'openai', 'anthropic', 'google', 'legacy']
     upstream_model: str = Field(min_length=1)
     base_url: str = ''
+    additional_base_urls: list[str] = Field(default_factory=list, max_length=7)
     api_key: str = ''
     headers: dict[str, str] = Field(default_factory=dict)
     parameters: dict[str, int | float | str] = Field(default_factory=dict)

@@ -2,10 +2,113 @@ import{test,expect}from'@playwright/test';
 const model={id:'coding-fast',name:'Coding Fast',provider:'legacy',upstream_model:'coding-fast',legacy:true,enabled:true};
 const draft={name:'Code Agent',description:'你的云端代码助手',enabled:true,instructions:'Help with code.',allowed_model_ids:['coding-fast'],default_model_id:'coding-fast',small_model_id:null,bindings:[]};
 const catalog={revision:1,models:{'coding-fast':model},agents:{'agent-code':{id:'agent-code',draft,active:1,versions:[{version:1,config:draft}]}},resources:{},jobs:{},gateway_versions:[]};
+const loadCapacity={known:true,admission_allowed:true,reasons:[],remaining_cpu:6,remaining_memory_mb:10000,cpu_usage_percent:20,memory_available_mb:12000,allocated_cpu:1,allocated_memory_mb:3000,reserved_cpu:1,reserved_memory_mb:1024,running_sandboxes:1};
+
+const loadReport={id:'lt_browser',created_at:1789110000,status:'completed',cleanup_status:'retained',
+ summary:{users:2,prepared:2,submitted:2,succeeded:2,failed:0,cancelled:0,success_rate:1,p50_ms:100,p95_ms:200,p99_ms:200,successful_requests_per_second:2,launch_spread_ms:3,input_tokens:20,output_tokens:8},
+ by_agent:{'agent-code':{users:2,succeeded:2,p95_ms:200}},
+ users:[{agent_id:'agent-code',username:'loadtest-browser-1',sandbox_id:'sbx_browser',session_id:'ses_browser',phase:'succeeded',storage_state:'retained',prepare_ms:50,latency_ms:100}]};
+
+test('load test selects existing Agents and submits user resource limits once',async({page})=>{
+ let body:any, calls=0;
+ await page.route('**/remote/cloud/capabilities',r=>r.fulfill({json:{load_testing:true}}));
+ await page.route('**/remote/cloud/admin/load-tests/options',r=>r.fulfill({json:{agents:[{id:'agent-code',name:'Code',version:1,model_id:'coding-fast'}],max_users:100,host_capacity:{cpu_count:8,memory_mb:16384},prompt:'LOAD-TEST-OK'}}));
+ await page.route('**/remote/cloud/admin/load-tests?*',r=>r.fulfill({json:{items:[],total:0}}));
+ await page.route('**/remote/cloud/admin/load-tests',r=>{calls++;body=r.request().postDataJSON();return r.fulfill({json:{id:'lt_browser',created:true}})});
+ await page.route('**/remote/cloud/admin/load-tests/lt_browser',r=>r.fulfill({json:loadReport}));
+ await page.goto('/admin');await page.getByRole('button',{name:'压测',exact:true}).click();
+ await expect(page.getByRole('button',{name:'开始压测',exact:true})).toBeDisabled();
+ await page.getByLabel('选择 agent-code',{exact:true}).check();
+ await page.getByLabel('agent-code 用户数',{exact:true}).fill('2');
+ await page.getByLabel('agent-code CPU',{exact:true}).fill('0.5');
+ await page.getByLabel('agent-code 内存',{exact:true}).fill('1536');
+ await expect(page.getByRole('status')).toContainText('2 个用户 / 2 个沙箱');
+ await page.getByRole('button',{name:'开始压测',exact:true}).click();
+ await expect(page.getByRole('region',{name:'压测报告'})).toBeVisible();
+ expect(calls).toBe(1);expect(body.agents).toEqual([{agent_id:'agent-code',users:2,cpu_limit:.5,memory_mb:1536}]);
+ expect(body.request_id.length).toBeGreaterThan(8);
+});
+
+test('load test report requires exact confirmation before destroying test users',async({page})=>{
+ let cleaned=false,confirmation:any;
+ await page.route('**/remote/cloud/capabilities',r=>r.fulfill({json:{load_testing:true}}));
+ await page.route('**/remote/cloud/admin/load-tests/options',r=>r.fulfill({json:{agents:[],max_users:100,host_capacity:{}}}));
+ await page.route('**/remote/cloud/admin/load-tests?*',r=>r.fulfill({json:{items:[loadReport],total:1}}));
+ await page.route('**/remote/cloud/admin/load-tests/lt_browser',r=>r.fulfill({json:{...loadReport,cleanup_status:cleaned?'cleaned':'retained'}}));
+ await page.route('**/remote/cloud/admin/load-tests/lt_browser/cleanup',r=>{confirmation=r.request().postDataJSON();cleaned=true;return r.fulfill({json:{cleanup_status:'cleaning'}})});
+ await page.goto('/admin');await page.getByRole('button',{name:'压测',exact:true}).click();
+ await page.getByRole('button',{name:/lt_browser/}).click();
+ const destroy=page.getByRole('button',{name:'销毁测试沙箱和用户数据',exact:true});
+ await expect(destroy).toBeDisabled();await page.getByLabel('输入完整测试 ID 确认',{exact:true}).fill('lt_browser');
+ await destroy.click();expect(confirmation).toEqual({confirmation:'lt_browser'});
+ await expect(page.getByText('数据状态：已清理',{exact:true})).toBeVisible();
+ await expect(page.getByRole('region',{name:'压测报告'})).toContainText('成功率 100%');
+});
+
+test('load test blocks over-budget and unknown capacity and shows user allowance',async({page})=>{
+ let known=true;
+ await page.route('**/remote/cloud/capabilities',r=>r.fulfill({json:{load_testing:true}}));
+ await page.route('**/remote/cloud/admin/load-tests/options',r=>r.fulfill({json:{agents:[{id:'agent-code',name:'Code',version:1,model_id:'coding-fast'}],max_users:100,host_capacity:{}}}));
+ await page.route('**/remote/cloud/admin/load-tests?*',r=>r.fulfill({json:{items:[],total:0}}));
+ await page.route('**/remote/cloud/admin/load-tests/capacity',r=>r.fulfill({json:{...loadCapacity,known,sampled_at:Date.now()/1000,remaining_cpu:1,remaining_memory_mb:1024}}));
+ await page.goto('/admin');await page.getByRole('button',{name:'压测',exact:true}).click();
+ await page.getByLabel('选择 agent-code',{exact:true}).check();
+ await page.getByLabel('agent-code 用户数',{exact:true}).fill('2');
+ await expect(page.getByRole('button',{name:'开始压测',exact:true})).toBeDisabled();
+ await expect(page.getByText('agent-code 在其他行不变时最多 1 个用户。')).toBeVisible();
+ await page.getByLabel('agent-code 用户数',{exact:true}).fill('1');
+ await expect(page.getByRole('button',{name:'开始压测',exact:true})).toBeEnabled();
+ known=false;await page.getByRole('button',{name:'刷新压测',exact:true}).click();
+ await expect(page.getByText('资源状态未知或已过期，暂不能开始压测。')).toBeVisible();
+ await expect(page.getByRole('button',{name:'开始压测',exact:true})).toBeDisabled();
+});
+
+test('old server capabilities explain unavailable operations',async({page})=>{
+ await page.route('**/remote/cloud/capabilities',r=>r.fulfill({json:{version:'0.2.2',management:true}}));
+ await page.goto('/admin');await page.getByRole('button',{name:'沙箱',exact:true}).click();
+ await expect(page.getByText('此服务器尚不支持这个管理功能。',{exact:false})).toBeVisible();
+ await expect(page.getByLabel('搜索沙箱')).toHaveCount(0);
+});
+
+test('restoring an imported template is an explicit unpublished action',async({page})=>{
+ let submitted:any;
+ await page.route('**/remote/cloud/admin/agent-templates',r=>r.fulfill({json:[{id:'tpl_browser',name:'Imported Agent',config:draft}]}));
+ await page.route('**/remote/cloud/admin/agent-templates/tpl_browser/restore',r=>{submitted=r.request().postDataJSON();return r.fulfill({json:{agent_id:'restored-browser',published:false}})});
+ await page.goto('/admin');await page.getByRole('button',{name:'导入导出',exact:true}).click();
+ await page.getByRole('combobox',{name:'待恢复配置',exact:true}).selectOption('tpl_browser');
+ expect(submitted).toBeUndefined();await page.getByLabel('新的 Agent ID',{exact:true}).fill('restored-browser');
+ await page.getByRole('button',{name:'恢复为新的 Agent 草稿'}).click();
+ expect(submitted).toEqual({agent_id:'restored-browser',models:{},resources:{}});
+ await expect(page.getByRole('status')).toContainText('草稿已创建');
+});
+
+test('resource import previews before committing global drafts',async({page})=>{
+ let committed:any;
+ await page.route('**/remote/cloud/admin/imports/preview',r=>r.fulfill({json:{preview_id:'imp_browser',warnings:[],items:[{key:'0',id:'docs',name:'docs',kind:'mcp',data:{type:'remote',url:'https://example.org/mcp'},files:[]}]}}));
+ await page.route('**/remote/cloud/admin/imports/imp_browser/commit',r=>{committed=r.request().postDataJSON();return r.fulfill({json:{imported:[{id:'docs'}],published:false,assigned_agents:[]}})});
+ await page.goto('/admin');await page.getByRole('button',{name:'导入导出',exact:true}).click();
+ await page.getByLabel('导入资源文件',{exact:true}).setInputFiles({name:'opencode.json',mimeType:'application/json',buffer:Buffer.from('{}')});
+ await expect(page.getByRole('heading',{name:'导入预览'})).toBeVisible();expect(committed).toBeUndefined();
+ await page.getByLabel('目标 ID docs').fill('docs-copy');
+ await page.getByRole('button',{name:'导入到全局资源池草稿'}).click();
+ expect(committed).toEqual({selections:[{key:'0',target_id:'docs-copy',replace:false}]});
+ await expect(page.getByRole('status')).toContainText('全局草稿');
+});
+
+test('provider template and draft test preserve unpublished form',async({page})=>{
+ let tested:any;
+ await page.route('**/remote/cloud/admin/provider-templates',r=>r.fulfill({json:[{id:'demo',name:'Demo Provider',provider:'openai-compatible',base_url:'https://example.org/v1',notes:'Test template',docs:'https://example.org'}]}));
+ await page.route('**/remote/cloud/admin/models/test-draft',r=>{tested=r.request().postDataJSON();return r.fulfill({json:{ok:true,published:false}})});
+ await page.goto('/admin');await page.getByRole('button',{name:'新建',exact:true}).click();
+ await page.getByLabel('厂商模板',{exact:true}).selectOption('demo');
+ await page.getByRole('button',{name:'测试当前表单（不保存、不发布）'}).click();
+ expect(tested.model.base_url).toBe('https://example.org/v1');
+ await expect(page.getByRole('status')).toContainText('当前表单测试通过');
+});
 test.beforeEach(async({page})=>{
  await page.addInitScript(()=>{const native=window.fetch.bind(window);window.fetch=async(input,init)=>{if(input==='/remote/event'){const stream=new ReadableStream({start(c){(window as any).__events=c;c.enqueue(new TextEncoder().encode('data: {"type":"server.connected","properties":{}}\n\n'));}});return new Response(stream,{headers:{'content-type':'text/event-stream'}})}return native(input,init)};});
  await page.route('**/remote/**',async route=>{const url=new URL(route.request().url()),p=url.pathname.replace('/remote','');let data:any={};
- if(p==='/cloud/agents')data=[{id:'agent-code',version:1,...draft}];else if(p==='/cloud/models')data=[model];else if(p==='/cloud/admin/catalog')data=catalog;else if(p==='/session'&&route.request().method()==='GET')data=[];else if(p==='/session'&&route.request().method()==='POST')data={id:'ses_browser'};else if(p.endsWith('/message'))data=[];else if(p==='/question'||p==='/permission')data=[];else data={ok:true};
+ if(p==='/cloud/admin/load-tests/capacity')data={...loadCapacity,sampled_at:Date.now()/1000};else if(p==='/cloud/capabilities')data={sandbox_operations:true,resource_transfer:{version:2},provider_templates:true};else if(p==='/cloud/agents')data=[{id:'agent-code',version:1,...draft}];else if(p==='/cloud/models')data=[model];else if(p==='/cloud/admin/catalog')data=catalog;else if(p==='/session'&&route.request().method()==='GET')data=[];else if(p==='/session'&&route.request().method()==='POST')data={id:'ses_browser'};else if(p.endsWith('/message'))data=[];else if(p==='/question'||p==='/permission')data=[];else data={ok:true};
  await route.fulfill({json:data});});
 });
 test('chat is usable and submits a prompt once',async({page})=>{
@@ -62,7 +165,7 @@ test('permission and question answers use native public endpoints',async({page})
 test('model references open locally without a connection error or catalog reload',async({page})=>{
  let loads=0;const errors:string[]=[];
  page.on('pageerror',e=>errors.push(e.message));
- await page.route('**/remote/cloud/admin/catalog',r=>{loads++;return r.fulfill({json:{...catalog,models:{'coding-fast':{...model,references:['agent-code']}}}})});
+ await page.route('**/remote/cloud/admin/catalog*',r=>{loads++;return r.fulfill({json:{...catalog,models:{'coding-fast':{...model,references:['agent-code']}}}})});
  await page.goto('/admin');
  await expect(page.getByRole('button',{name:'引用关系',exact:true})).toBeVisible();
  const initialLoads=loads;
@@ -135,4 +238,22 @@ test('Agent form JSON comes from the server compiler and updates without saving'
  await page.getByLabel('小模型（可选）',{exact:true}).selectOption('coding-fast');
  await expect(page.locator('.form-config-preview .json-view')).toContainText('"small_model": "coding-fast"');
  expect(saves).toBe(0);
+});
+
+test('sandbox search and restart use the operations API',async({page})=>{
+ const row={sandbox_id:'sbx_ui',container_id:'container_ui',agent_id:'agent-code',username:'alice',status:'ready',desired_state:'running',last_active_at:'2026-09-10'};
+ let submitted:any=null;
+ await page.route('**/remote/cloud/admin/sandboxes?*',async route=>{
+  const q=new URL(route.request().url()).searchParams.get('q')||'';
+  await route.fulfill({json:{items:'sbx_ui container_ui alice'.includes(q)?[row]:[],total:'sbx_ui container_ui alice'.includes(q)?1:0}});
+ });
+ await page.route('**/remote/cloud/admin/sandboxes/sbx_ui/restart',async route=>{submitted=route.request().postDataJSON();await route.fulfill({json:{job_id:'job_ui'}})});
+ await page.route('**/remote/cloud/admin/jobs/job_ui',async route=>route.fulfill({json:{id:'job_ui',status:'succeeded'}}));
+ await page.goto('/admin');await page.getByRole('button',{name:'沙箱',exact:true}).click();
+ await page.getByLabel('搜索沙箱').fill('alice');
+ await expect(page.getByText('sbx_ui',{exact:true})).toBeVisible();
+ page.on('dialog',dialog=>dialog.accept());
+ await page.getByRole('button',{name:'重启',exact:true}).click();
+ await expect.poll(()=>submitted?.request_id?.length).toBe(36);
+ await expect(page.getByRole('status')).toContainText('succeeded');
 });

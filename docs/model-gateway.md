@@ -1,5 +1,7 @@
 # 模型网关部署与自动验证
 
+本文说明基础网关及其验证。当前模型配置、厂商示例与 Agent 映射见[管理运维](management-operations.md)和[厂商示例](provider-examples.md)：模型先入全局候选配置，发布网关后显式分配给 Agent。下方“尚未加入网关身份认证”描述基础网关模板，不代表平台管理 API 没有 Bearer 认证。
+
 LiteLLM 固定为 `1.98.0`，镜像摘要记录在 `versions.env` 与 Compose 中。升级时必须更新二者并重新运行验证，离线打包应保存该摘要对应镜像；验证过程不需要供应商密钥。
 
 在 Ubuntu WSL 的 controller 虚拟环境内安装项目及测试依赖后，运行：

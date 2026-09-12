@@ -63,7 +63,7 @@ class HealthMonitor:
 
     async def tick(self, *, now: datetime | None = None) -> None:
         async with self._tick_lock:
-            await self.model_health()
+            dependencies_healthy = await self.model_health()
             records = await asyncio.to_thread(self.backend.registry.list_sandboxes)
             if not records:
                 return
@@ -81,9 +81,14 @@ class HealthMonitor:
             # Four workers bound slow Docker operations without serializing the
             # complete health pass behind one sandbox.
             await asyncio.gather(*(worker() for _ in range(min(4, len(records)))))
+            management = getattr(self.backend, 'management', None)
+            if management and hasattr(management, 'operations'):
+                await management.operations.recovery.tick(dependencies_healthy, self.failures)
 
     async def _check_sandbox(self, snapshot, now: datetime | None) -> None:
         management = getattr(self.backend, 'management', None)
+        if management and hasattr(management, 'load_tests') and management.load_tests.active_user(snapshot.agent_id, snapshot.username):
+            return  # The load runner owns lifecycle until its report is final.
         if management and snapshot.agent_id in management.blocked:
             return
         if not snapshot.container_id:

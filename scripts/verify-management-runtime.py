@@ -92,8 +92,9 @@ async def main():
     remote_mcp = ThreadingHTTPServer((bridge, 0), RemoteMCP)
     threading.Thread(target=remote_mcp.serve_forever, daemon=True).start()
     async with httpx.AsyncClient(base_url=f'http://127.0.0.1:{listener.getsockname()[1]}',
-                                headers={'Authorization': 'Bearer ' + token}, timeout=180, trust_env=False) as client:
+                                headers={'Authorization': 'Bearer ' + token}, timeout=600, trust_env=False) as client:
         async def api(method, path, **kwargs):
+            print(method + ' ' + path, flush=True)
             response = await client.request(method, path, **kwargs)
             if response.status_code >= 400:
                 raise RuntimeError(f'{method} {path} -> {response.status_code}: {response.text[:500]}')
@@ -191,7 +192,32 @@ for line in sys.stdin:
             history = await api('GET', f'/session/{sid}/message', headers=headers)
             assert history
             report['checks']['rollback_preserves_session'] = True
+            sandboxes = await api('GET', '/cloud/admin/sandboxes?q=verify-agent')
+            sandbox_id = sandboxes['items'][0]['sandbox_id']
+            for operation in ('restart', 'stop', 'start'):
+                request = {'request_id': secrets.token_hex(16)}
+                first = await api('POST', f'/cloud/admin/sandboxes/{sandbox_id}/{operation}', json=request)
+                assert await api('POST', f'/cloud/admin/sandboxes/{sandbox_id}/{operation}', json=request) == first
+                await wait_job(first['job_id'])
+                if operation == 'stop':
+                    stopped = await client.get(f'/session/{sid}/message', headers=headers)
+                    assert stopped.status_code == 409
+            assert await api('GET', f'/session/{sid}/message', headers=headers)
+            report['checks']['manual_operations_preserve_history_and_are_idempotent'] = True
+            for operation in ('archive', 'restore', 'archive'):
+                await wait_job((await api('POST', f'/cloud/admin/agents/verify-agent/{operation}', json={'request_id': secrets.token_hex(16)}))['job_id'])
+            impact = await api('GET', '/cloud/admin/agents/verify-agent/delete-preview')
+            assert impact['sessions'] > 0 and impact['files'] > 0
+            request = {'request_id': secrets.token_hex(16), 'preview_id': impact['preview_id'], 'confirmation': 'verify-agent'}
+            deletion = await api('POST', '/cloud/admin/agents/verify-agent/delete', json=request)
+            await wait_job(deletion['job_id'])
+            assert await api('POST', '/cloud/admin/agents/verify-agent/delete', json=request) == deletion
+            assert 'verify-agent' not in (await api('GET', '/cloud/admin/catalog'))['agents']
+            report['checks']['archive_restore_permanent_delete'] = True
             report['result'] = 'passed'
+        except Exception as exc:
+            report.update(result='failed', error=type(exc).__name__)
+            raise
         finally:
             remote_mcp.shutdown()
             remote_mcp.server_close()

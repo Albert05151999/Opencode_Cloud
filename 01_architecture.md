@@ -1,6 +1,6 @@
 # OpenCode 云端智能体平台 — 架构设计
 
-> 状态：拟议的实现基线  
+> 状态：基础架构已实现；本文件保留初始设计与扩展方案，当前实现和交付状态见 [项目进度](项目进度.md)。
 > 目标：使用 Windows + VS Code + Codex 开发，通过 WSL2 进行本地验证；生产环境优先采用单台 Linux 主机，后续可扩展至多主机  
 > 主要语言：Python  
 > 运行时决策：Docker Engine + runc  
@@ -8,6 +8,8 @@
 > OpenCode 原则：使用未经源码修改的上游 `opencode serve`，并保留其原生 HTTP 路径
 
 ---
+
+当前补充：04 阶段加入本地 Web、单管理员 Bearer、版本化配置与发布；05 阶段加入 Agent 生命周期、沙箱运维和资源迁移；06 阶段加入压测及宿主容量准入。SQLite、Docker/runc、Agent×User 沙箱与未经源码修改的 OpenCode 仍为基础。`auth.enabled` 对应的旧 JWT 适配器仍未实现，不等于当前没有管理员认证。管理能力由安装生成的 `data_root/admin-token` 启用。详见 04～06 阶段文档及 API 契约后部扩展。
 
 ## 1. 最终架构决策
 

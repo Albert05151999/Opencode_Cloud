@@ -1,6 +1,10 @@
-# OpenCode Cloud Web 0.2.2
+# OpenCode Cloud Web 0.3.0
 
-0.2.2 新增配置 JSON 预览。管理页顶部“全局 JSON”展示全局资源和脱敏的模型网关文件；Agent 的“配置预览与版本历史”分别展示已生效 opencode.json 与已保存草稿。编辑表单下方实时显示 JSON，可复制。Agent 表单调用只读服务端编译器；MCP、Skill、Hook 表单显示待绑定片段，模型表单区分 LiteLLM 条目与 Agent 模型声明。全局资源库本身不是一份会直接加载的 opencode.json。升级此功能需同时更新服务器和本地 Web。
+配置 JSON 预览始于 0.2.2，0.3.0 继续保留。后续源码已增加[自动压测与容量检查](load-testing.md)，旧 0.3.0 ZIP 不含这些能力，需要重新构建两端；发布范围见 [项目进度](../项目进度.md)。
+
+0.3.0 包含 Agent 生命周期、沙箱详情与启停、异常自动恢复、资源导入导出、加密配置迁移及厂商模板。完整操作顺序见 `docs/management-operations.md`，七个厂商的可导入示例见 `examples/providers/`。配置迁移不包含会话或工作区。
+
+0.3.0 保留自 0.2.2 提供的配置 JSON 预览。管理页顶部“全局 JSON”展示全局资源和脱敏的模型网关文件；Agent 的“配置预览与版本历史”分别展示已生效 opencode.json 与已保存草稿。编辑表单下方实时显示 JSON，可复制。Agent 表单调用只读服务端编译器；MCP、Skill、Hook 表单显示待绑定片段，模型表单区分 LiteLLM 条目与 Agent 模型声明。全局资源库本身不是一份会直接加载的 opencode.json。升级此功能需同时更新服务器和本地 Web。
 
 0.2.1 将会话目录绑定放到服务端初始化：实际默认 cwd 与上传/下载目录统一为 `/workspace/sessions/<id>`，无需手动 cd 或目录 Hook。保留 ui-r1～ui-r3 的前端修复。如果曾按旧说明安装 `session-workspace` Hook，请先在 Agent 中移除该绑定并发布，避免旧 Hook 重复拼接会话目录；不要删除其他业务 Hook。
 
@@ -12,7 +16,7 @@ Windows 本地聊天与管理页，入口 `http://127.0.0.1:18765/chat`。服务
 
 升级本地包前先停止旧 Web 终端（Ctrl+C），再从新版本解压目录启动；已保存的连接和 Windows 凭据保留。
 
-需要 Windows、Python 3.11+。在项目根目录，或解压后的 `cloud-agent-web-0.2.2` 目录运行：
+需要 Windows、Python 3.11+。在项目根目录，或解压后的 `cloud-agent-web-0.3.0` 目录运行：
 
 ```powershell
 powershell -ExecutionPolicy Bypass -File .\start-web.ps1
@@ -30,7 +34,7 @@ powershell -ExecutionPolicy Bypass -File .\start-web.ps1
 
 ```powershell
 $server = 'ubuntu@106.52.221.61'
-$bundle = '.\artifacts\release\web-v0.2.2\cloud-agent-release-0.2.2.zip'
+$bundle = '.\artifacts\release\web-v0.3.0\cloud-agent-release-0.3.0.zip'
 scp $bundle '.\deploy\.env' "${server}:/home/ubuntu/"
 if ($LASTEXITCODE -ne 0) { throw '上传失败' }
 ssh $server
@@ -41,8 +45,8 @@ ssh $server
 ```bash
 cd /home/ubuntu
 chmod 600 .env
-unzip -q cloud-agent-release-0.2.2.zip
-cd cloud-agent-release-0.2.2
+unzip -q cloud-agent-release-0.3.0.zip
+cd cloud-agent-release-0.3.0
 sudo bash deploy/install.sh --root /srv/cloud-agent --env-file /home/ubuntu/.env --host 0.0.0.0 --port 18080
 sudo bash /srv/cloud-agent/deploy/status.sh --root /srv/cloud-agent
 sudo cat /srv/cloud-agent/data/admin-token

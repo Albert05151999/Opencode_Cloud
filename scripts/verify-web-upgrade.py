@@ -31,10 +31,10 @@ def main():
     import argparse
     parser = argparse.ArgumentParser()
     parser.add_argument('--keep-running', action='store_true', help='Keep only this owned test stack for Windows companion verification')
-    parser.add_argument('--from-version', default='0.2.0', choices=['0.1.0', '0.2.0'])
+    parser.add_argument('--from-version', default='0.2.2', choices=['0.1.0', '0.2.0', '0.2.2'])
     args = parser.parse_args()
     version = (ROOT / 'VERSION').read_text().strip()
-    source = ROOT / ('artifacts/release/network-r1/cloud-agent-release-0.1.0-network-r1' if args.from_version == '0.1.0' else 'artifacts/release/web-v0.2.0/cloud-agent-release-0.2.0')
+    source = ROOT / ('artifacts/release/network-r1/cloud-agent-release-0.1.0-network-r1' if args.from_version == '0.1.0' else f'artifacts/release/web-v{args.from_version}/cloud-agent-release-{args.from_version}')
     bundle = ROOT / f'artifacts/release/web-v{version}/cloud-agent-release-{version}'
     root = Path(tempfile.mkdtemp(prefix='cloud-web-upgrade-', dir='/srv'))
     root.chmod(0o755)
@@ -122,7 +122,13 @@ def main():
         assert session['directory'] == f"/workspace/sessions/{session['id']}"
         history = api('GET', f"/session/{session['id']}/message")
         tool_parts = [p for message in history for p in message['parts'] if p.get('type') == 'tool']
-        assert session['directory'] in json.dumps(tool_parts)
+        # A provider may redirect pwd instead of printing it. Prove the actual
+        # contract: default-cwd bash writes a relative artifact in this session.
+        assert any(p.get('tool') == 'bash' and p.get('state', {}).get('status') == 'completed'
+                   and 'outputs/model-result.txt' in p['state'].get('input', {}).get('command', '')
+                   and 'workdir' not in p['state'].get('input', {})
+                   and '/workspace' not in p['state']['input']['command']
+                   and 'cd ' not in p['state']['input']['command'] for p in tool_parts)
         artifact = client.get('/cloud/files/download', params={'agent_id': 'import-agent', 'username': 'verification',
             'session_id': session['id'], 'path': 'outputs/model-result.txt'})
         artifact.raise_for_status()

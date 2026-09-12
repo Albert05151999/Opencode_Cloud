@@ -22,6 +22,8 @@ def anyio_backend():
 def runtime(tmp_path):
     value = object.__new__(ManagementRuntime)
     value.store = ManagementStore(tmp_path / 'management', ROOT / 'agents')
+    from app.load_test_store import LoadTestStore
+    value.load_tests = SimpleNamespace(store=LoadTestStore(value.store))
     import asyncio
     value.lock = asyncio.Lock()
     value.blocked, value.requests, value.acquiring = set(), {}, {}

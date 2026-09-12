@@ -76,6 +76,12 @@ def step(container, report: dict, name: str, command: list[str]) -> bytes:
     result = container.exec_run(command, demux=False)
     code = int(result.exit_code)
     report["steps"].append({"name": name, "exit_code": code})
+    if name == 'doctor_precheck':
+        try:
+            observed = json.loads(result.output)
+            report['preflight'] = {k: observed[k] for k in ('result', 'checks', 'errors', 'profile', 'policy') if k in observed}
+        except (ValueError, TypeError):
+            pass
     if code:
         raise VerificationError(name + "_failed")
     return result.output or b""
@@ -118,7 +124,7 @@ for _, controllers, relative in rows:
         return None
 
 
-def verify(zip_path: Path, env_path: Path) -> dict:
+def verify(zip_path: Path, env_path: Path, profile: str = 'strict') -> dict:
     package_root = validate_zip(zip_path)
     if not env_path.is_file():
         raise VerificationError("env_file_missing")
@@ -126,7 +132,7 @@ def verify(zip_path: Path, env_path: Path) -> dict:
     fixture = uuid.uuid4().hex
     name = "cloud-package-" + fixture[:12]
     report = {
-        "result": "running", "fixture": fixture, "outer_image": read_version_value("ACCEPTANCE_DIND_IMAGE"),
+        "result": "running", "fixture": fixture, "outer_image": read_version_value("ACCEPTANCE_DIND_IMAGE"), "profile": profile,
         "started_at": datetime.now(timezone.utc).isoformat(),
         "initial_images_empty": False, "no_development_checkout_mount": True, "steps": [], "image_ids": {},
         "resources": {"memory_bytes": 10 * 1024**3, "swap_limit_bytes": 0, "nano_cpus": 8_000_000_000},
@@ -164,6 +170,10 @@ def verify(zip_path: Path, env_path: Path) -> dict:
         report["steps"].append({"name": "inject_env_archive", "exit_code": 0})
         release = f"/release/{package_root}"
         step(container, report, "unzip", ["unzip", "-q", "/root/release.zip", "-d", "/release"])
+        if profile == 'coexistence-trial':
+            step(container, report, 'select_trial_profile', ['python3', '-c',
+                'from pathlib import Path; p=Path("/srv/cloud-agent"); p.mkdir(parents=True,exist_ok=True); '
+                '(p/".preflight-profile").write_text("coexistence-trial\\n")'])
         step(container, report, "doctor_precheck", ["python3", f"{release}/deploy/doctor.py", "--root", "/srv/cloud-agent", "--config", f"{release}/config/config.cfg", "--skip-image-check"])
         step(container, report, "install", ["bash", f"{release}/deploy/install.sh", "--root", "/srv/cloud-agent", "--env-file", "/root/provider.env"])
         manifest = json.loads(step(container, report, "read_release_manifest", ["cat", "/srv/cloud-agent/release-images.json"]))
@@ -233,9 +243,10 @@ def main() -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument("zip", type=Path)
     parser.add_argument("--env-file", type=Path, default=ROOT / "deploy" / ".env")
+    parser.add_argument('--profile', choices=['strict', 'coexistence-trial'], default='strict')
     args = parser.parse_args()
     try:
-        report = verify(args.zip.resolve(), args.env_file.resolve())
+        report = verify(args.zip.resolve(), args.env_file.resolve(), args.profile)
     except VerificationError as exc:
         report = {"result": "failed", "error_category": str(exc), "steps": []}
     except Exception:

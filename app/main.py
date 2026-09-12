@@ -35,7 +35,7 @@ def create_app(
     metrics_enabled: bool = True,
     metrics_path: str = "/metrics",
 ) -> FastAPI:
-    application = FastAPI(title="OpenCode Cloud Controller", version="0.2.2", lifespan=lifespan)
+    application = FastAPI(title="OpenCode Cloud Controller", version="0.3.0", lifespan=lifespan)
     application.add_middleware(RequestLogMiddleware)
     metrics = metrics or PlatformMetrics()
     application.state.metrics = metrics
@@ -82,6 +82,14 @@ def build_app(config: AppConfig, agents_root: Path) -> FastAPI:
         management = ManagementRuntime(store, backend, upstream)
         backend.management = management
         management_routers.append(create_admin_router(store, management))
+        from app.operations_api import create_operations_router
+        management_routers.append(create_operations_router(management))
+        from app.transfers_api import create_transfers_router
+        management_routers.append(create_transfers_router(store, management))
+        from app.providers import create_provider_router
+        management_routers.append(create_provider_router(management))
+        from app.load_test_api import create_load_test_router
+        management_routers.append(create_load_test_router(management.load_tests))
 
     @asynccontextmanager
     async def lifespan(application):
@@ -119,6 +127,7 @@ def build_app(config: AppConfig, agents_root: Path) -> FastAPI:
             raise RuntimeError('Administrator token must contain at least 32 characters')
         application.add_middleware(AdminAuthMiddleware, token=token)
         application.state.management = management
+        management.load_tests.bind(application, token)
         original_openapi = application.openapi
         def management_openapi():
             schema = original_openapi()

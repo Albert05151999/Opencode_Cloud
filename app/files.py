@@ -229,6 +229,9 @@ def create_files_router(config: StorageConfig, workspaces: WorkspaceManager, met
         file: UploadFile = File(), session_id: str | None = Form(None),
         relative_path: str | None = Form(None),
     ) -> dict[str, object]:
+        management = getattr(request.app.state, 'management', None)
+        if management and management.load_tests.owns_user(username):
+            raise HTTPException(409, 'Load-test users only accept the fixed workload, not manual uploads')
         bind_request(request.scope, component="files", agent_id=agent_id, username=username, session_id=session_id)
         return await service.upload(agent_id, username, file, relative_path, session_id)
 

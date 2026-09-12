@@ -1,0 +1,16 @@
+{
+  "provider": {
+    "qwen-cn": {
+      "npm": "@ai-sdk/openai-compatible",
+      "options": {
+        "baseURL": "https://dashscope.aliyuncs.com/compatible-mode/v1",
+        "apiKey": "{env:QWEN_CN_API_KEY}"
+      },
+      "models": {
+        "qwen-plus": {
+          "name": "阿里云百炼 · 北京"
+        }
+      }
+    }
+  }
+}

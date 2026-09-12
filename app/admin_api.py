@@ -17,14 +17,19 @@ def create_admin_router(store, runtime):
 
     @router.get('/cloud/capabilities')
     def capabilities():
-        return {'version': '0.2.2', 'configuration_preview': True, 'session_workspace_binding': True, 'authentication': 'bearer', 'management': True,
+        return {'version': '0.3.0', 'sandbox_operations': True, 'agent_archive': True, 'configuration_preview': True, 'session_workspace_binding': True, 'authentication': 'bearer', 'management': True,
             'resource_kinds': ['mcp', 'skill', 'hook'], 'model_gateway': 'litellm',
-            'mcp_oauth': False, 'skill_upload_limit': 20 * 1024**2}
+            'mcp_oauth': False, 'skill_upload_limit': 20 * 1024**2,
+            'agent_delete_preview': True, 'automatic_recovery': True,
+            'resource_transfer': {'version': 2, 'encrypted': True, 'agent_templates': True, 'native_export':True},
+            'provider_templates': True, 'draft_model_test': True, 'load_testing': True}
 
     @router.get('/cloud/agents')
     def agents():
         _, data = store.read()
-        return [{'id': aid, 'version': a['active'], **(store.agent_config(a) or {'enabled': False})}
+        return [{'id': aid, 'version': a['active'], **(store.agent_config(a) or {'enabled': False}),
+                 'lifecycle': a.get('lifecycle', 'active'),
+                 'enabled': a.get('lifecycle') not in {'archived', 'deleting'} and bool((store.agent_config(a) or {}).get('enabled', False))}
                 for aid, a in data['agents'].items()]
 
     @router.get('/cloud/models')
@@ -41,8 +46,8 @@ def create_admin_router(store, runtime):
         return [redact(m) for m in available.values() if m.get('enabled', True)]
 
     @router.get('/cloud/admin/catalog')
-    def catalog():
-        result = store.public_catalog()
+    def catalog(compact: bool = False):
+        result = store.public_catalog(compact)
         for j in result['jobs'].values():
             j.pop('gateway_backup', None)
         return result
@@ -219,6 +224,8 @@ def create_admin_router(store, runtime):
         agent = data['agents'].get(agent_id)
         if not agent:
             fail('Agent not found', 404)
+        if agent.get('lifecycle') == 'deleting':
+            fail('Finish permanent deletion before applying configuration', 409)
         cfg = agent['draft']
         if payload.get('version'):
             version = next((v for v in agent['versions'] if v['version'] == payload['version']), None)

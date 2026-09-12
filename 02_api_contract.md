@@ -2,7 +2,9 @@
 
 > 目标：保留 OpenCode 原生端点路径，同时只添加 Agent×User 沙箱所需的最小云端路由契约。  
 > 不修改 OpenCode 源代码。  
-> 初始阶段禁用身份认证，但预留 JWT 请求头契约。
+> 当前安装使用单管理员 Bearer；早期 JWT 适配器仍是预留设计。基础原生代理与后部管理/运维/压测扩展共同构成当前契约。
+
+更新说明（2026-09-12）：当前进度见 [项目进度](项目进度.md)。管理认证随 `data_root/admin-token` 启用，不能通过 `auth.enabled=true` 启用旧 JWT 方案。本文保留早期章节的阶段背景；管理接口、沙箱运维、配置迁移及自动压测以相应扩展章节为准。`/cloud/health` 是存活检查，`/cloud/health/ready` 是依赖就绪检查，`/cloud/admin/load-tests/capacity` 才提供压测所需宿主资源余量。
 
 ---
 
@@ -839,4 +841,97 @@ curl -fsS -H "Authorization: Bearer $TOKEN" "$API/cloud/admin/agents/agent-code/
 curl -fsS -H "Authorization: Bearer $TOKEN" -H 'Content-Type: application/json' \
   --data-binary @agent-preview.json "$API/cloud/admin/agents/agent-code/config-preview"
 unset TOKEN
+```
+
+## 开发中：沙箱运维与 Agent 归档
+
+本组接口自 0.3.0 提供。`GET /cloud/admin/sandboxes` 支持 `q`、`status`、`offset`、`limit`（1～100），返回 `items`、`total`、采样时间；状态来自注册表与后台健康检查，并非每次实时 Docker inspect。
+
+以下 POST 接口接受 `{ "request_id": "客户端生成的唯一请求ID", "revision": 可选目录版本 }`，返回 `{ "job_id": "..." }`。通过已有 `/cloud/admin/jobs/{job_id}` 查询结果。同一请求 ID、类型和目标重复提交返回原任务；同 ID 不同操作返回 409。
+
+- `/cloud/admin/sandboxes/{sandbox_id}/start`
+- `/cloud/admin/sandboxes/{sandbox_id}/stop`
+- `/cloud/admin/sandboxes/{sandbox_id}/restart`
+- `/cloud/admin/agents/{agent_id}/archive`
+- `/cloud/admin/agents/{agent_id}/restore`
+- `/cloud/admin/agents/{agent_id}/delete-empty`
+
+沙箱操作当前按 Agent 范围排空，最多 120 秒，不强制中断，不自动重发模型请求。手动停止须从管理页启动后才能继续聊天。归档禁止新生成，保留历史和工作区；恢复不发布未生效草稿。空 Agent 删除要求没有发布历史、沙箱和私有资源，有关联数据时返回 409。
+
+### 开发版新增接口
+
+| 方法与路径 | 请求 / 返回 |
+|---|---|
+| GET `/cloud/admin/recovery-policy` | 当前自动恢复策略 |
+| PUT `/cloud/admin/recovery-policy` | enabled、failure_threshold、max_attempts、window_seconds、backoff_seconds、stable_seconds |
+| GET `/cloud/admin/agents/{id}/delete-preview` | 五分钟预览 ID、版本、文件/会话数量及影响摘要 |
+| POST `/cloud/admin/agents/{id}/delete` | request_id、preview_id、confirmation（完整 Agent ID）；返回 job_id |
+| GET `/cloud/admin/provider-templates` | 厂商模板数组与说明链接 |
+| POST `/cloud/admin/models/test-draft` | `{model: ModelDefinition}`；隔离网关测试当前内容，不保存或发布 |
+| POST `/cloud/admin/imports/preview` | multipart file，可选 password（加密包）；返回预览、逐项错误、冲突、文件清单 |
+| POST `/cloud/admin/imports/{id}/commit` | `{selections: [{key,target_id,replace}]}`；事务提交全局草稿，返回 imported、published:false、assigned_agents:[] |
+| GET `/cloud/admin/exports/resources` | 脱敏的平台资源 JSON |
+| POST `/cloud/admin/exports/encrypted` | `{password,include_credentials:false}`；返回加密资源 JSON，口令 12～1024 字符 |
+| POST 本地 `/local/imports/preview` | `{file,include_external_skills:false}`；收集指定 Windows 文件及 Skill 目录，转发远端预览 |
+
+普通资源上传上限 20 MiB，加密包上限 40 MiB、解密后上限 20 MiB。预览有效期十五分钟；提交校验目录版本，冲突返回 409。v2 导出包含模型、MCP/Skill/Hook 草稿及版本、Agent 配置模板和文件摘要；导入后所有扩展都是未发布全局草稿，模板须单独恢复。v1 仍可导入。
+
+| 0.3.0 补充接口 | 语义 |
+|---|---|
+| GET `/cloud/admin/sandboxes/{id}` | CPU/内存、运行/任务/健康状态、会话归属和采样时间 |
+| GET `/cloud/admin/sandboxes/{id}/force-preview` | 五分钟影响预览；stop/restart 请求可携带 force_preview_id 和 confirmation（完整沙箱 ID） |
+| GET `/cloud/admin/jobs?offset=0&limit=25` | 分页任务历史，可选 target |
+| POST `/cloud/admin/jobs/{id}/cancel` | 取消未进入应用阶段的任务；永久删除不能取消 |
+| GET `/cloud/admin/agent-templates` | 待恢复模板列表 |
+| POST `/cloud/admin/agent-templates/{id}/restore` | agent_id、models（源 ID 到目标 ID）、resources（源 ID 到 `{id,version}`）；只创建草稿 |
+| GET `/cloud/admin/exports/native/{agent_id}` | 原生配置 ZIP，继续依赖原模型网关 |
+| POST `/cloud/admin/models/config-preview` | ModelWrite DTO，复用服务端网关编译器生成 gateway/agent 片段 |
+
+ModelDefinition 增加 additional_base_urls（最多七个等价端点）；所有端点使用相同的模型名、凭据与参数。RecoveryPolicy 增加 agent_enabled（Agent ID 到布尔值）和 max_parallel_recoveries（1～2，当前共享锁实际串行执行）。
+
+### 自动压测（源码新增能力）
+
+`/cloud/capabilities` 中 `load_testing:true` 表示支持。所有接口沿用管理员 Bearer；`loadtest-` 用户名为压测专用，由任务生成，不能自行创建未登记的测试用户。
+
+| 接口 | 语义 |
+|---|---|
+| GET `/cloud/admin/load-tests/options` | 现有已发布、启用的 Agent 与默认模型；默认参数、100 用户上限、准备并发 4、主机容量摘要 |
+| GET `/cloud/admin/load-tests/capacity` | 服务器资源快照；最多缓存 5 秒，采样失败返回 `known:false`，禁止据此启动 |
+| POST `/cloud/admin/load-tests` | LoadRequest；返回 202 `{id,created}`；request_id 幂等，重复 ID 参数不一致或已有压测运行返回 409 |
+| GET `/cloud/admin/load-tests?offset=0&limit=25` | 分页记录与 active_id；limit 1～100 |
+| GET `/cloud/admin/load-tests/{id}` | 状态、用户阶段、summary、by_agent、资源配置与清理状态 |
+| POST `/cloud/admin/load-tests/{id}/cancel` | 202；取消不删除数据，等待准备完成或中止请求后形成最终报告 |
+| POST `/cloud/admin/load-tests/{id}/cleanup` | `{confirmation:"完整测试ID"}`；202，显式清理完成/中断任务的用户数据；运行中返回 409，重复清理幂等 |
+| GET `/cloud/admin/load-tests/{id}/report?format=json` | JSON 完整报告；format=csv 为 UTF-8 CSV 用户明细 |
+
+容量快照包含 `known`、`sampled_at`（Unix 秒）、`admission_allowed`、`reasons`、`cpu_count`、`cpu_usage_percent`、`memory_mb`、`memory_available_mb`、`allocated_cpu`、`allocated_memory_mb`、`reserved_cpu`、`reserved_memory_mb`、`remaining_cpu`、`remaining_memory_mb`、`running_sandboxes`、`running_containers`、`unbounded_sandboxes` 和 `policy`。未知状态只返回状态、原因、时间及策略，调用方不可将缺少的资源字段当作零负载。CPU 单位为核，内存为 MiB。预算含其他运行容器和已停止沙箱配额，规则见 `docs/load-testing.md`。
+
+POST 创建任务前强制重新采样。超预算、CPU 繁忙或预留不足返回 409，状态未知或超过 15 秒返回 503；拒绝时不创建测试用户或任务。相同 `request_id` 与参数的已接受请求仍返回原任务，不因后来资源不足而重复创建。每批准备前及开始生成前再次校验，资源不足时停止本次后续执行，保留数据与报告。报告增加 `admission_capacity`、`capacity_checks`；容量阻止执行时包含 `capacity_blocked:true`。
+
+LoadRequest 示例（不修改 Agent 默认资源）：
+
+```json
+{
+  "request_id": "test-20260911-001",
+  "agents": [
+    {"agent_id": "agent-code", "users": 2, "cpu_limit": 1, "memory_mb": 1024},
+    {"agent_id": "agent-data", "users": 1, "cpu_limit": 2, "memory_mb": 2048}
+  ],
+  "timeout_seconds": 180,
+  "prepare_timeout_seconds": 120
+}
+```
+
+单任务最多 100 用户、不允许重复 Agent 行；CPU 0.25～64 核、内存 256～65536 MiB。每用户一次固定提示词、使用当前默认模型；先准备会话再同步释放请求，准备失败也计入报告。状态为 queued/preparing/running/cancelling 或 completed/completed_with_errors/failed/cancelled/interrupted。cleanup_status 独立为 retained/cleaning/cleaned/failed。报告清理后仍保留。
+
+延迟分位数仅统计成功请求；吞吐量为成功数除以首个请求发起至最后请求结束时间。调用原生接口但绕过公网入口，不测网络或浏览器。取消/超时的 abort_confirmed=false 表示不能确认原生任务已停止，需显式销毁测试沙箱。
+
+```bash
+# 已有 API 与 TOKEN 环境变量；不要将口令写入 URL。
+curl -fsS -H "Authorization: Bearer $TOKEN" "$API/cloud/admin/sandboxes?q=agent-code"
+curl -fsS -H "Authorization: Bearer $TOKEN" -F 'file=@opencode.json' "$API/cloud/admin/imports/preview"
+# import-selection.json 为 {"selections":[{"key":"0","target_id":"docs","replace":false}]}
+curl -fsS -H "Authorization: Bearer $TOKEN" -H 'Content-Type: application/json' \
+  --data-binary @import-selection.json "$API/cloud/admin/imports/预览ID/commit"
+curl -fsS -H "Authorization: Bearer $TOKEN" "$API/cloud/admin/exports/resources" -o cloud-resources.json
 ```

@@ -102,6 +102,14 @@ class PerformanceConfig:
 
 
 @dataclass(frozen=True)
+class LoadCapacityConfig:
+    reserved_cpu: float = 1.0
+    reserved_memory_mb: int = 1024
+    reserve_fraction: float = .1
+    max_cpu_usage_percent: float = 90.0
+
+
+@dataclass(frozen=True)
 class AppConfig:
     platform: PlatformConfig
     auth: AuthConfig
@@ -111,6 +119,7 @@ class AppConfig:
     model_gateway: ModelGatewayConfig
     metrics: MetricsConfig
     performance: PerformanceConfig
+    load_capacity: LoadCapacityConfig = LoadCapacityConfig()
 
     def safe_dict(self) -> dict[str, object]:
         return asdict(self)
@@ -251,6 +260,14 @@ def load_config(path: str | Path = "config.cfg", environ: Mapping[str, str] | No
             key: int(_positive(parser.getint("performance", key), f"performance.{key}"))
             for key in PerformanceConfig.__dataclass_fields__
         })
+        load_capacity = LoadCapacityConfig(
+            reserved_cpu=parser.getfloat('load_capacity', 'reserved_cpu', fallback=1),
+            reserved_memory_mb=parser.getint('load_capacity', 'reserved_memory_mb', fallback=1024),
+            reserve_fraction=parser.getfloat('load_capacity', 'reserve_fraction', fallback=.1),
+            max_cpu_usage_percent=parser.getfloat('load_capacity', 'max_cpu_usage_percent', fallback=90))
+        if not (0 < load_capacity.reserved_cpu <= 1024 and load_capacity.reserved_memory_mb >= 256
+                and 0 <= load_capacity.reserve_fraction < 1 and 1 <= load_capacity.max_cpu_usage_percent <= 100):
+            raise ConfigurationError('Invalid load_capacity reserve or CPU threshold')
     except (configparser.Error, ValueError) as exc:
         if isinstance(exc, ConfigurationError):
             raise
@@ -261,4 +278,4 @@ def load_config(path: str | Path = "config.cfg", environ: Mapping[str, str] | No
                 opencode.startup_disable_default_plugins, opencode.startup_disable_lsp_download,
                 opencode.share_disabled)):
         raise ConfigurationError("OpenCode safety and deterministic-start flags must stay enabled")
-    return AppConfig(platform, auth, sandbox, storage, opencode, model_gateway, metrics, performance)
+    return AppConfig(platform, auth, sandbox, storage, opencode, model_gateway, metrics, performance, load_capacity)

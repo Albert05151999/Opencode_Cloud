@@ -149,9 +149,16 @@ class LocalDockerBackend:
         return {"observed": len(observed), "missing": len(missing)}
 
     async def acquire(self, agent_id: str, username: str) -> SandboxEndpoint:
+        management = getattr(self, 'management', None)
+        if management and hasattr(management, 'operations'):
+            await asyncio.to_thread(management.operations.check_acquire, agent_id, username)
         key = (agent_id, username)
         lock = self._locks.setdefault(key, asyncio.Lock())
         async with lock:
+            if management and hasattr(management, 'load_tests'):
+                # Recheck under the same lock cleanup uses, closing the queued
+                # acquire/cleanup race for test-user tombstones.
+                management.load_tests.resources_for(agent_id, username)
             acquire_started = time.perf_counter()
             if self.metrics is not None:
                 self.metrics.sandbox_starting.inc()
@@ -329,6 +336,11 @@ class LocalDockerBackend:
     ) -> Any:
         image = self.config.sandbox.image
         resources = (await asyncio.to_thread(self.agent_catalog.load, agent_id)).resources
+        management = getattr(self, 'management', None)
+        test_user = management.load_tests.resources_for(agent_id, username) if management and hasattr(management, 'load_tests') else None
+        if test_user:
+            from dataclasses import replace
+            resources = replace(resources, cpu_limit=test_user['cpu_limit'], memory_mb=test_user['memory_mb'])
         try:
             await asyncio.to_thread(self.client.images.get, image)
         except ImageNotFound as exc:
@@ -350,6 +362,8 @@ class LocalDockerBackend:
             "cloud.platform_instance": self.config.platform.instance_id,
             "cloud.image_version": image,
         }
+        if test_user:
+            labels['cloud.load_test'] = test_user['run_id']
         return await asyncio.to_thread(
             self.client.containers.create,
             image=image,

@@ -51,6 +51,9 @@ class WorkspaceManager:
 
         agent = validate_identifier(agent_id, "agent_id")
         user = validate_identifier(username, "username")
+        guard = getattr(self, 'user_guard', None)
+        if guard:
+            guard(agent, user)
 
         workspace = self._create_directory(
             self.workspace_root, self._workspace_root_real, agent, user

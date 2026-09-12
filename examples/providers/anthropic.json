@@ -1,0 +1,16 @@
+{
+  "provider": {
+    "anthropic": {
+      "npm": "@ai-sdk/anthropic",
+      "options": {
+        "baseURL": "https://api.anthropic.com",
+        "apiKey": "{env:ANTHROPIC_API_KEY}"
+      },
+      "models": {
+        "claude-sonnet-5": {
+          "name": "Anthropic"
+        }
+      }
+    }
+  }
+}

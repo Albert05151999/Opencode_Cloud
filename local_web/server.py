@@ -139,6 +139,20 @@ def create_local_app(root=None, connection=None):
             raise HTTPException(503, 'File picker unavailable; enter the full path instead')
         return importer.discover(file=path) if path else {'sources': []}
 
+    @app.post('/local/imports/preview')
+    async def preview_resources(payload: dict = Body()):
+        from local_web.resource_import import collect
+        content = await asyncio.to_thread(collect, importer, payload.get('file'), payload.get('include_external_skills', False))
+        try:
+            response = await client.post(connection.url + '/cloud/admin/imports/preview',
+                headers={'Authorization': 'Bearer ' + connection.token},
+                files={'file': ('resources.json', content, 'application/json')})
+        except httpx.HTTPError:
+            raise HTTPException(502, 'Remote resource import connection failed')
+        if not response.is_success:
+            raise HTTPException(response.status_code, response.json().get('detail', 'Resource import failed'))
+        return response.json()
+
     @app.post('/local/opencode/import')
     async def import_config(payload: dict = Body()):
         values = importer.take(payload['preview_id'], payload['selected'])

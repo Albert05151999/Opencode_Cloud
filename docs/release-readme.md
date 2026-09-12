@@ -1,5 +1,7 @@
 # OpenCode Cloud 0.1.0
 
+历史文档：以下为 0.1.0 包说明，认证、包结构和功能描述不代表当前版本。当前首次安装使用[部署指南](../部署指南.md)，进度见[项目进度](../项目进度.md)。当前管理安装使用单管理员 Bearer；下面“身份认证适配器尚未实现”指早期 JWT 方案。
+
 此包面向 Linux x86_64、Docker Engine 29.8.0/runc。宿主机需要 Docker Compose、Python 3.11+、bash、zstd 和 unzip；建议至少 16 GiB 内存，最低 8 GiB，保留至少 8 GiB 可用磁盘和 3 GiB 可用内存。镜像已包含，无需在目标机安装 Node、OpenCode 或 Python 应用依赖。
 
 ## 安装

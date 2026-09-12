@@ -25,7 +25,8 @@ def main():
     assert os.name == 'nt', 'Run with the Windows companion virtual environment'
     import httpx
     from keyring.backends.Windows import WinVaultKeyring
-    upgrade = json.loads((ROOT / 'artifacts/web/upgrade-verification.json').read_text())
+    version = (ROOT / 'VERSION').read_text().strip()
+    upgrade = json.loads((ROOT / f'artifacts/web/upgrade-{version}-verification.json').read_text())
     assert upgrade['result'] == 'passed' and 'retained' in upgrade.get('cleanup', '')
     command = ['wsl', '-d', 'Ubuntu-24.04', '-u', 'root', '--']
     token = subprocess.check_output(command + ['cat', upgrade['root'] + '/data/admin-token']).decode().strip()

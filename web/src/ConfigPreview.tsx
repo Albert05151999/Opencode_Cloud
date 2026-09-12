@@ -1,3 +1,4 @@
+import {ModelPreview} from './ModelPreview';
 import {useEffect,useState} from 'react';
 import {Copy,Code2} from 'lucide-react';
 import {Dict,remote} from './api';
@@ -32,12 +33,8 @@ export function FormConfigPreview({type,value,parameters}:{type:string,value:Dic
  },[type,value]);
  if(type==='agent')return <div className="form-config-preview"><h3>表单 → opencode.json</h3><p className="muted">实时调用服务器发布编译器，仅预览，不保存或启动沙箱。</p>{loading&&<p role="status">正在生成预览…</p>}{error&&<p className="notice warning">请完善表单后预览：{error}</p>}{result&&<JsonConfig title="opencode.json · 当前表单（未保存）" value={result.opencode}/>}</div>;
  let fragment:Dict={},note='此片段在资源发布、绑定到 Agent 并发布 Agent 后插入配置。';
- if(type==='model'){
-  let params:Dict;try{params=JSON.parse(parameters);if(!params||Array.isArray(params)||typeof params!=='object')throw Error()}catch{return <p className="notice warning">模型参数不是有效的 JSON 对象，暂时无法预览。</p>}
-  const provider=({'openai-compatible':'openai',openai:'openai',anthropic:'anthropic',google:'gemini'} as Dict)[value.provider];
-  const model={name:value.name||value.id,...(value.context&&value.output?{limit:{context:value.context,output:value.output}}:{})};
-  return <div className="form-config-preview"><JsonConfig title="模型网关条目 · 当前表单" value={value.legacy?{model_name:value.id,source:'部署环境变量'}:{model_name:value.id,litellm_params:{model:provider+'/'+(value.upstream_model||'<模型ID>'),api_key:value.api_key||'',...params,...(value.base_url?{api_base:value.base_url}:{}),...(Object.keys(value.headers||{}).length?{extra_headers:value.headers}:{})}}} note={value.enabled===false?'模型已停用，发布时不会生成网关条目。':'模型 API key 仅保存在网关，不进入 Agent。此处是待发布条目。'}/><JsonConfig title="Agent 选择此模型后的 opencode.json 片段" value={{provider:{'cloud-model-gateway':{models:{[value.id||'<模型ID>']:model}}}}} note="只有 Agent 勾选此模型并发布后才会加入；默认模型在 Agent 表单中单独设置。"/></div>;
- }
+ if(type==='model')return <ModelPreview value={value} parameters={parameters}/>;
+
  const data=value.data||{},name=value.name||value.id||'<资源名称>';
  if(value.kind==='mcp'){
   const {cwd,...native}=data;
