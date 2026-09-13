@@ -1,0 +1,325 @@
+{
+  "version": "1.0.0",
+  "routes": [
+    {
+      "method": "GET",
+      "path": "/cloud/capabilities",
+      "module": "catalog_service"
+    },
+    {
+      "method": "GET",
+      "path": "/cloud/agents",
+      "module": "catalog_service"
+    },
+    {
+      "method": "GET",
+      "path": "/cloud/models",
+      "module": "catalog_service"
+    },
+    {
+      "method": "GET",
+      "path": "/cloud/admin/catalog",
+      "module": "catalog_service"
+    },
+    {
+      "method": "GET",
+      "path": "/cloud/admin/models",
+      "module": "catalog_service"
+    },
+    {
+      "method": "PUT",
+      "path": "/cloud/admin/models/{model_id}",
+      "module": "catalog_service"
+    },
+    {
+      "method": "POST",
+      "path": "/cloud/admin/models/import",
+      "module": "catalog_service"
+    },
+    {
+      "method": "POST",
+      "path": "/cloud/admin/models/apply",
+      "module": "operations"
+    },
+    {
+      "method": "POST",
+      "path": "/cloud/admin/models/{model_id}/test",
+      "module": "catalog_service"
+    },
+    {
+      "method": "DELETE",
+      "path": "/cloud/admin/models/{model_id}",
+      "module": "catalog_service"
+    },
+    {
+      "method": "GET",
+      "path": "/cloud/admin/agents",
+      "module": "catalog_service"
+    },
+    {
+      "method": "PUT",
+      "path": "/cloud/admin/agents/{agent_id}",
+      "module": "catalog_service"
+    },
+    {
+      "method": "POST",
+      "path": "/cloud/admin/agents/{agent_id}/copy",
+      "module": "catalog_service"
+    },
+    {
+      "method": "PUT",
+      "path": "/cloud/admin/agents/{agent_id}/bindings",
+      "module": "catalog_service"
+    },
+    {
+      "method": "GET",
+      "path": "/cloud/admin/agents/{agent_id}/effective-config",
+      "module": "catalog_service"
+    },
+    {
+      "method": "POST",
+      "path": "/cloud/admin/agents/{agent_id}/config-preview",
+      "module": "catalog_service"
+    },
+    {
+      "method": "GET",
+      "path": "/cloud/admin/config-preview",
+      "module": "catalog_service"
+    },
+    {
+      "method": "POST",
+      "path": "/cloud/admin/agents/{agent_id}/apply",
+      "module": "operations"
+    },
+    {
+      "method": "POST",
+      "path": "/cloud/admin/agents/{agent_id}/rollback",
+      "module": "operations"
+    },
+    {
+      "method": "GET",
+      "path": "/cloud/admin/resources",
+      "module": "catalog_service"
+    },
+    {
+      "method": "PUT",
+      "path": "/cloud/admin/resources/{resource_id}",
+      "module": "catalog_service"
+    },
+    {
+      "method": "POST",
+      "path": "/cloud/admin/resources/{resource_id}/copy",
+      "module": "catalog_service"
+    },
+    {
+      "method": "POST",
+      "path": "/cloud/admin/resources/{resource_id}/upload",
+      "module": "catalog_service"
+    },
+    {
+      "method": "GET",
+      "path": "/cloud/admin/resources/{resource_id}/versions",
+      "module": "catalog_service"
+    },
+    {
+      "method": "GET",
+      "path": "/cloud/admin/resources/{resource_id}/file",
+      "module": "catalog_service"
+    },
+    {
+      "method": "POST",
+      "path": "/cloud/admin/resources/{resource_id}/publish",
+      "module": "catalog_service"
+    },
+    {
+      "method": "POST",
+      "path": "/cloud/admin/resources/{resource_id}/test",
+      "module": "catalog_service"
+    },
+    {
+      "method": "GET",
+      "path": "/cloud/admin/jobs/{job_id}",
+      "module": "operations"
+    },
+    {
+      "method": "GET",
+      "path": "/cloud/admin/jobs",
+      "module": "operations"
+    },
+    {
+      "method": "POST",
+      "path": "/cloud/admin/jobs/{jid}/cancel",
+      "module": "operations"
+    },
+    {
+      "method": "GET",
+      "path": "/cloud/admin/sandboxes/{sid}",
+      "module": "operations"
+    },
+    {
+      "method": "GET",
+      "path": "/cloud/admin/sandboxes/{sid}/force-preview",
+      "module": "operations"
+    },
+    {
+      "method": "GET",
+      "path": "/cloud/admin/sandboxes",
+      "module": "operations"
+    },
+    {
+      "method": "GET",
+      "path": "/cloud/admin/recovery-policy",
+      "module": "operations"
+    },
+    {
+      "method": "PUT",
+      "path": "/cloud/admin/recovery-policy",
+      "module": "operations"
+    },
+    {
+      "method": "GET",
+      "path": "/cloud/admin/agents/{aid}/delete-preview",
+      "module": "operations"
+    },
+    {
+      "method": "POST",
+      "path": "/cloud/admin/agents/{aid}/delete",
+      "module": "operations"
+    },
+    {
+      "method": "POST",
+      "path": "/cloud/admin/sandboxes/{sid}/start",
+      "module": "operations"
+    },
+    {
+      "method": "POST",
+      "path": "/cloud/admin/sandboxes/{sid}/stop",
+      "module": "operations"
+    },
+    {
+      "method": "POST",
+      "path": "/cloud/admin/sandboxes/{sid}/restart",
+      "module": "operations"
+    },
+    {
+      "method": "POST",
+      "path": "/cloud/admin/agents/{aid}/archive",
+      "module": "operations"
+    },
+    {
+      "method": "POST",
+      "path": "/cloud/admin/agents/{aid}/restore",
+      "module": "operations"
+    },
+    {
+      "method": "POST",
+      "path": "/cloud/admin/agents/{aid}/delete-empty",
+      "module": "operations"
+    },
+    {
+      "method": "GET",
+      "path": "/cloud/admin/exports/native/{aid}",
+      "module": "catalog_service"
+    },
+    {
+      "method": "GET",
+      "path": "/cloud/admin/agent-templates",
+      "module": "catalog_service"
+    },
+    {
+      "method": "POST",
+      "path": "/cloud/admin/agent-templates/{tid}/restore",
+      "module": "catalog_service"
+    },
+    {
+      "method": "POST",
+      "path": "/cloud/admin/imports/preview",
+      "module": "catalog_service"
+    },
+    {
+      "method": "POST",
+      "path": "/cloud/admin/exports/encrypted",
+      "module": "catalog_service"
+    },
+    {
+      "method": "POST",
+      "path": "/cloud/admin/imports/{preview_id}/commit",
+      "module": "catalog_service"
+    },
+    {
+      "method": "GET",
+      "path": "/cloud/admin/exports/resources",
+      "module": "catalog_service"
+    },
+    {
+      "method": "GET",
+      "path": "/cloud/admin/provider-templates",
+      "module": "catalog_service"
+    },
+    {
+      "method": "POST",
+      "path": "/cloud/admin/models/test-draft",
+      "module": "catalog_service"
+    },
+    {
+      "method": "POST",
+      "path": "/cloud/admin/models/config-preview",
+      "module": "catalog_service"
+    },
+    {
+      "method": "GET",
+      "path": "/cloud/admin/load-tests/options",
+      "module": "operations"
+    },
+    {
+      "method": "GET",
+      "path": "/cloud/admin/load-tests/capacity",
+      "module": "operations"
+    },
+    {
+      "method": "GET",
+      "path": "/cloud/admin/load-tests",
+      "module": "operations"
+    },
+    {
+      "method": "POST",
+      "path": "/cloud/admin/load-tests",
+      "module": "operations"
+    },
+    {
+      "method": "GET",
+      "path": "/cloud/admin/load-tests/{rid}",
+      "module": "operations"
+    },
+    {
+      "method": "POST",
+      "path": "/cloud/admin/load-tests/{rid}/cancel",
+      "module": "operations"
+    },
+    {
+      "method": "POST",
+      "path": "/cloud/admin/load-tests/{rid}/cleanup",
+      "module": "operations"
+    },
+    {
+      "method": "GET",
+      "path": "/cloud/admin/load-tests/{rid}/report",
+      "module": "operations"
+    },
+    {
+      "method": "POST",
+      "path": "/cloud/files/upload",
+      "module": "file_service"
+    },
+    {
+      "method": "GET",
+      "path": "/cloud/files/download",
+      "module": "file_service"
+    },
+    {
+      "method": "GET",
+      "path": "/cloud/files/list",
+      "module": "file_service"
+    }
+  ]
+}

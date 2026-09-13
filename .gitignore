@@ -1,6 +1,7 @@
 # Generated reports, downloads, backups and offline image bundles.
-# Recreate release bundles with scripts/build-from-source.sh.
-artifacts/
+# Recreate release bundles with python -m build_image bundle.
+artifacts/*
+!artifacts/scripts/
 .venv/
 .venv-controller/
 __pycache__/
@@ -14,3 +15,17 @@ web/node_modules/
 web/dist/
 web/test-results/
 web/playwright-report/
+
+.venv-*/
+.ruff_cache/
+data/
+log/
+admin_web/frontend/node_modules/
+admin_web/frontend/dist/
+admin_web/frontend/test-results/
+admin_web/frontend/playwright-report/
+/tmp.cfg
+
+# Local planning state and macOS metadata.
+/.planning/
+.DS_Store

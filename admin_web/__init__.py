@@ -1,0 +1,1 @@
+"""Independent local administration client."""

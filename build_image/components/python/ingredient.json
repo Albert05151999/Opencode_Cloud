@@ -1,0 +1,7 @@
+{
+  "source": "config/build_image/versions.json",
+  "keys": [
+    "PYTHON_VERSION",
+    "CONTROLLER_BASE_IMAGE"
+  ]
+}

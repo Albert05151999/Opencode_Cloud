@@ -1,0 +1,26 @@
+{
+  "catalog_service": {
+    "settings": {
+      "sandbox": {
+        "default_cpu": 1,
+        "default_memory_mb": 1024
+      }
+    }
+  },
+  "sandbox_manager": {
+    "settings": {
+      "controller_config": {
+        "sandbox": {
+          "start_timeout_seconds": 120
+        }
+      }
+    }
+  },
+  "nginx": {
+    "settings": {
+      "domain": "cloud-acceptance.invalid",
+      "log_max_bytes": 2048,
+      "log_backup_count": 2
+    }
+  }
+}

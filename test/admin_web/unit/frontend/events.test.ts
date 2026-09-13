@@ -1,0 +1,75 @@
+import { test } from "node:test";
+import assert from "node:assert/strict";
+import { mergeEvent } from "../../../../admin_web/frontend/src/events.ts";
+test("events stay scoped to the selected session", () => {
+  const messages = [{ info: { id: "m", role: "assistant" }, parts: [] }];
+  assert.equal(
+    mergeEvent(
+      messages,
+      {
+        type: "message.updated",
+        properties: { info: { id: "x", sessionID: "other" } },
+      },
+      "s",
+    ),
+    messages,
+  );
+});
+test("delta then snapshot does not duplicate text", () => {
+  let messages: any[] = [{ info: { id: "m", role: "assistant" }, parts: [] }];
+  messages = mergeEvent(
+    messages,
+    {
+      type: "message.part.delta",
+      properties: {
+        sessionID: "s",
+        messageID: "m",
+        partID: "p",
+        field: "text",
+        delta: "Hello",
+      },
+    },
+    "s",
+  );
+  messages = mergeEvent(
+    messages,
+    {
+      type: "message.part.updated",
+      properties: {
+        part: {
+          id: "p",
+          sessionID: "s",
+          messageID: "m",
+          type: "text",
+          text: "Hello world",
+        },
+      },
+    },
+    "s",
+  );
+  assert.equal(messages[0].parts[0].text, "Hello world");
+});
+test("tool updates replace the same part", () => {
+  let messages: any[] = [];
+  for (const status of ["pending", "running", "completed"])
+    messages = mergeEvent(
+      messages,
+      {
+        type: "message.part.updated",
+        properties: {
+          part: {
+            id: "p",
+            sessionID: "s",
+            messageID: "m",
+            type: "tool",
+            tool: "bash",
+            state: { status },
+          },
+        },
+      },
+      "s",
+    );
+  assert.equal(messages.length, 1);
+  assert.equal(messages[0].parts.length, 1);
+  assert.equal(messages[0].parts[0].state.status, "completed");
+});

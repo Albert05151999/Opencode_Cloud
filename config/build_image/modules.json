@@ -1,0 +1,91 @@
+{
+  "api_gateway": {
+    "version": "1.0.0",
+    "sources": [
+      "api_gateway"
+    ],
+    "recipe": "build_image/modules/api_gateway/Dockerfile",
+    "shared_libs": {
+      "version": "1.0.0",
+      "source": "shared_libs"
+    }
+  },
+  "catalog_service": {
+    "version": "1.0.0",
+    "sources": [
+      "catalog_service"
+    ],
+    "recipe": "build_image/modules/catalog_service/Dockerfile",
+    "shared_libs": {
+      "version": "1.0.0",
+      "source": "shared_libs"
+    }
+  },
+  "sandbox_manager": {
+    "version": "1.0.0",
+    "sources": [
+      "sandbox_manager"
+    ],
+    "recipe": "build_image/modules/sandbox_manager/Dockerfile",
+    "shared_libs": {
+      "version": "1.0.0",
+      "source": "shared_libs"
+    }
+  },
+  "file_service": {
+    "version": "1.0.0",
+    "sources": [
+      "file_service"
+    ],
+    "recipe": "build_image/modules/file_service/Dockerfile",
+    "shared_libs": {
+      "version": "1.0.0",
+      "source": "shared_libs"
+    }
+  },
+  "model_gateway": {
+    "version": "1.0.0",
+    "sources": [
+      "model_gateway"
+    ],
+    "recipe": "build_image/modules/model_gateway/Dockerfile",
+    "shared_libs": {
+      "version": "1.0.0",
+      "source": "shared_libs"
+    }
+  },
+  "operations": {
+    "version": "1.0.0",
+    "sources": [
+      "operations"
+    ],
+    "recipe": "build_image/modules/operations/Dockerfile",
+    "shared_libs": {
+      "version": "1.0.0",
+      "source": "shared_libs"
+    }
+  },
+  "observability": {
+    "version": "1.0.0",
+    "sources": [
+      "observability"
+    ],
+    "recipe": "build_image/modules/observability/Dockerfile",
+    "shared_libs": {
+      "version": "1.0.0",
+      "source": "shared_libs"
+    }
+  },
+  "agent_runtime": {
+    "version": "1.0.0",
+    "sources": [
+      "agent_runtime"
+    ],
+    "recipe": "build_image/modules/agent_runtime/Dockerfile"
+  },
+  "nginx": {
+    "version": "1.0.0",
+    "sources": [],
+    "recipe": "build_image/nginx/Dockerfile"
+  }
+}

@@ -1,0 +1,32 @@
+{
+  "schema_version": 1,
+  "module_id": "catalog_service",
+  "host": "0.0.0.0",
+  "port": 8101,
+  "data_root": "/data/catalog_service",
+  "log_root": "/log",
+  "service_token": "${SERVICE_TOKEN}",
+  "services": {
+    "api_gateway": "http://api_gateway:18080",
+    "sandbox_manager": "http://sandbox_manager:8102",
+    "file_service": "http://file_service:8103",
+    "model_gateway": "http://model_gateway:8104",
+    "operations": "http://operations:8105",
+    "observability": "http://observability:8106"
+  },
+  "settings": {
+    "model_gateway_public_url": "http://host.docker.internal:8104/v1",
+    "agent_runtime_image": "opencode-cloud/agent_runtime:1.0.0",
+    "seed_root": "",
+    "logging": {
+      "max_bytes": 10485760,
+      "backup_count": 5
+    },
+    "sandbox": {
+      "idle_timeout_seconds": 1800,
+      "default_cpu": 2,
+      "default_memory_mb": 2048,
+      "default_pids": 256
+    }
+  }
+}

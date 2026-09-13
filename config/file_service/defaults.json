@@ -1,0 +1,29 @@
+{
+  "schema_version": 1,
+  "module_id": "file_service",
+  "host": "0.0.0.0",
+  "port": 8103,
+  "data_root": "/data/file_service",
+  "log_root": "/log",
+  "service_token": "${SERVICE_TOKEN}",
+  "services": {
+    "api_gateway": "http://api_gateway:18080",
+    "catalog_service": "http://catalog_service:8101",
+    "sandbox_manager": "http://sandbox_manager:8102",
+    "model_gateway": "http://model_gateway:8104",
+    "operations": "http://operations:8105",
+    "observability": "http://observability:8106"
+  },
+  "settings": {
+    "workspace_root": "/workspaces",
+    "state_root": "/data/file_service/state",
+    "max_upload_mb": 512,
+    "max_user_workspace_gb": 20,
+    "runtime_uid": 10001,
+    "runtime_gid": 10001,
+    "logging": {
+      "max_bytes": 10485760,
+      "backup_count": 5
+    }
+  }
+}

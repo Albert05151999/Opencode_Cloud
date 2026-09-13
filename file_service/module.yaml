@@ -1,0 +1,15 @@
+{
+  "module_id": "file_service",
+  "version": "1.0.0",
+  "entrypoint": "file_service.main",
+  "build": {
+    "sources": [
+      "file_service"
+    ],
+    "shared_libs": {
+      "version": "1.0.0",
+      "source": "shared_libs"
+    },
+    "requirements": "file_service/requirements.lock"
+  }
+}

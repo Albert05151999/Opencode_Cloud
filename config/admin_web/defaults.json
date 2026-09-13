@@ -1,0 +1,21 @@
+{
+  "schema_version": 1,
+  "module_id": "admin_web",
+  "host": "127.0.0.1",
+  "port": 18765,
+  "data_root": "data/admin_web",
+  "log_root": "/log",
+  "service_token": "${SERVICE_TOKEN}",
+  "services": {
+    "api_gateway": "http://api_gateway:18080",
+    "catalog_service": "http://catalog_service:8101",
+    "sandbox_manager": "http://sandbox_manager:8102",
+    "file_service": "http://file_service:8103",
+    "model_gateway": "http://model_gateway:8104",
+    "operations": "http://operations:8105",
+    "observability": "http://observability:8106"
+  },
+  "settings": {
+    "gateway_url": "http://127.0.0.1:18080"
+  }
+}

@@ -1,0 +1,15 @@
+{
+  "module_id": "observability",
+  "version": "1.0.0",
+  "entrypoint": "observability.main",
+  "build": {
+    "sources": [
+      "observability"
+    ],
+    "shared_libs": {
+      "version": "1.0.0",
+      "source": "shared_libs"
+    },
+    "requirements": "observability/requirements.lock"
+  }
+}

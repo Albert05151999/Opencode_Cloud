@@ -1,0 +1,34 @@
+{
+  "module_id": "operations",
+  "version": "1.0.0",
+  "entrypoint": "operations.main",
+  "port": 8080,
+  "health": {
+    "live": "/health/live",
+    "ready": "/health/ready"
+  },
+  "dependencies": {
+    "sandbox_manager": "v1",
+    "catalog_service": "v1",
+    "file_service": "v1",
+    "model_gateway": "v1",
+    "observability": "v1"
+  },
+  "data": {
+    "root": "data/operations",
+    "owner": "operations"
+  },
+  "build": {
+    "sources": [
+      "operations"
+    ],
+    "shared_libs": {
+      "version": "1.0.0",
+      "source": "shared_libs"
+    },
+    "requirements": "operations/requirements.lock"
+  },
+  "tests": [
+    "test/operations"
+  ]
+}

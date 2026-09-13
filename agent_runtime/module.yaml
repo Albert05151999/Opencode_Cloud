@@ -1,0 +1,10 @@
+{
+  "module_id": "agent_runtime",
+  "version": "1.0.0",
+  "entrypoint": "/usr/local/bin/runtime-entrypoint",
+  "build": {
+    "sources": [
+      "agent_runtime"
+    ]
+  }
+}

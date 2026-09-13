@@ -1,0 +1,24 @@
+{
+  "schema_version": 1,
+  "module_id": "api_gateway",
+  "host": "0.0.0.0",
+  "port": 18080,
+  "data_root": "/data/api_gateway",
+  "log_root": "/log",
+  "service_token": "${SERVICE_TOKEN}",
+  "services": {
+    "catalog_service": "http://catalog_service:8101",
+    "sandbox_manager": "http://sandbox_manager:8102",
+    "file_service": "http://file_service:8103",
+    "model_gateway": "http://model_gateway:8104",
+    "operations": "http://operations:8105",
+    "observability": "http://observability:8106"
+  },
+  "settings": {
+    "admin_token": "${ADMIN_TOKEN}",
+    "logging": {
+      "max_bytes": 10485760,
+      "backup_count": 5
+    }
+  }
+}

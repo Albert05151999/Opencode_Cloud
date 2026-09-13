@@ -1,0 +1,7 @@
+{
+  "source": "config/build_image/versions.json",
+  "keys": [
+    "NODE_VERSION",
+    "NODE_ARCHIVE_SHA256"
+  ]
+}

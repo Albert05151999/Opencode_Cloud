@@ -1,0 +1,31 @@
+{
+  "module_id": "catalog_service",
+  "version": "1.0.0",
+  "entrypoint": "catalog_service.main",
+  "port": 8080,
+  "health": {
+    "live": "/health/live",
+    "ready": "/health/ready"
+  },
+  "dependencies": {
+    "sandbox_manager": "v1",
+    "model_gateway": "v1"
+  },
+  "data": {
+    "root": "data/catalog_service",
+    "owner": "catalog_service"
+  },
+  "build": {
+    "sources": [
+      "catalog_service"
+    ],
+    "shared_libs": {
+      "version": "1.0.0",
+      "source": "shared_libs"
+    },
+    "requirements": "catalog_service/requirements.lock"
+  },
+  "tests": [
+    "test/catalog_service"
+  ]
+}

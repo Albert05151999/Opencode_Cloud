@@ -1,0 +1,37 @@
+{
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "module_id", "host", "port", "data_root", "log_root", "service_token", "services", "settings"],
+  "properties": {
+    "schema_version": {"type": "integer", "const": 1},
+    "module_id": {"type": "string", "const": "observability"},
+    "host": {"type": "string"},
+    "port": {"type": "integer", "minimum": 1, "maximum": 65535},
+    "data_root": {"type": "string"},
+    "log_root": {"type": "string"},
+    "service_token": {"type": "string"},
+    "services": {
+      "type": "object",
+      "additionalProperties": {"type": "string"}
+    },
+    "settings": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["retention_days", "trace_scan_files", "trace_scan_bytes", "logging"],
+      "properties": {
+        "retention_days": {"type": "integer", "minimum": 1},
+        "trace_scan_files": {"type": "integer", "minimum": 1, "maximum": 500},
+        "trace_scan_bytes": {"type": "integer", "minimum": 1048576, "maximum": 268435456},
+        "logging": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["max_bytes", "backup_count"],
+          "properties": {
+            "max_bytes": {"type": "integer", "minimum": 1},
+            "backup_count": {"type": "integer", "minimum": 0}
+          }
+        }
+      }
+    }
+  }
+}

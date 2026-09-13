@@ -1,0 +1,23 @@
+{
+  "schema_version": 1,
+  "module_id": "operations",
+  "host": "0.0.0.0",
+  "port": 8105,
+  "data_root": "/data/operations",
+  "log_root": "/log",
+  "service_token": "${SERVICE_TOKEN}",
+  "services": {
+    "api_gateway": "http://api_gateway:18080",
+    "catalog_service": "http://catalog_service:8101",
+    "sandbox_manager": "http://sandbox_manager:8102",
+    "file_service": "http://file_service:8103",
+    "model_gateway": "http://model_gateway:8104",
+    "observability": "http://observability:8106"
+  },
+  "settings": {
+    "logging": {
+      "max_bytes": 10485760,
+      "backup_count": 5
+    }
+  }
+}

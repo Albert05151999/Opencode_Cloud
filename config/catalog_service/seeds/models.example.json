@@ -1,0 +1,15 @@
+{
+  "schema_version": 1,
+  "models": [
+    {
+      "id": "my-model",
+      "name": "My model",
+      "provider": "openai-compatible",
+      "upstream_model": "${SEED_MODEL_NAME}",
+      "base_url": "${SEED_MODEL_BASE_URL}",
+      "api_key": "${SEED_MODEL_API_KEY}",
+      "enabled": true
+    }
+  ],
+  "templates": []
+}

@@ -1,0 +1,6 @@
+{
+  "source": "config/build_image/versions.json",
+  "keys": [
+    "OPENCODE_VERSION"
+  ]
+}

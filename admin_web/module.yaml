@@ -1,0 +1,10 @@
+module_id: admin_web
+version: 0.3.0
+entrypoint: python -m admin_web.local_service
+port: 18765
+healthcheck: /local/bootstrap
+dependencies:
+  api_gateway: public-v1
+build: python admin_web/build.py
+config_schema: admin_web/config.schema.json
+tests: python -m pytest test/admin_web/unit

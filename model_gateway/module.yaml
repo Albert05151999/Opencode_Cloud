@@ -1,0 +1,15 @@
+{
+  "module_id": "model_gateway",
+  "version": "1.0.0",
+  "entrypoint": "model_gateway.main",
+  "build": {
+    "sources": [
+      "model_gateway"
+    ],
+    "shared_libs": {
+      "version": "1.0.0",
+      "source": "shared_libs"
+    },
+    "requirements": "model_gateway/requirements.lock"
+  }
+}

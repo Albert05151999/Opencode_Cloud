@@ -1,0 +1,19 @@
+{
+  "catalog_service": {
+    "settings": {
+      "sandbox": {
+        "default_cpu": 1,
+        "default_memory_mb": 1024
+      }
+    }
+  },
+  "sandbox_manager": {
+    "settings": {
+      "controller_config": {
+        "sandbox": {
+          "start_timeout_seconds": 120
+        }
+      }
+    }
+  }
+}

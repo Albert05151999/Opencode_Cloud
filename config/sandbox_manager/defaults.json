@@ -1,0 +1,101 @@
+{
+  "schema_version": 1,
+  "module_id": "sandbox_manager",
+  "host": "0.0.0.0",
+  "port": 8102,
+  "data_root": "/data/sandbox_manager",
+  "log_root": "/log",
+  "service_token": "${SERVICE_TOKEN}",
+  "services": {
+    "api_gateway": "http://api_gateway:18080",
+    "catalog_service": "http://catalog_service:8101",
+    "file_service": "http://file_service:8103",
+    "model_gateway": "http://model_gateway:8104",
+    "operations": "http://operations:8105",
+    "observability": "http://observability:8106"
+  },
+  "settings": {
+    "controller_config": {
+      "platform": {
+        "instance_id": "local-dev-01",
+        "host": "0.0.0.0",
+        "port": 18080,
+        "log_level": "INFO",
+        "data_root": "/data/sandbox_manager",
+        "sqlite_synchronous": "NORMAL"
+      },
+      "auth": {
+        "enabled": false,
+        "jwt_header": "Authorization",
+        "jwt_algorithm": "HS256",
+        "jwt_issuer": "cloud-agent",
+        "cookie_token_endpoint": "/cloud/auth/token",
+        "token_endpoint_enabled": true
+      },
+      "sandbox": {
+        "runtime": "runc",
+        "image": "opencode-cloud/agent_runtime:1.0.0",
+        "opencode_internal_port": 4096,
+        "idle_timeout_seconds": 1800,
+        "start_timeout_seconds": 15,
+        "health_interval_seconds": 30,
+        "read_only_rootfs": true,
+        "tmpfs_mb": 512,
+        "default_cpu": 4.0,
+        "default_memory_mb": 4096,
+        "default_pids": 512,
+        "health_failure_threshold": 3
+      },
+      "storage": {
+        "workspace_root": "/workspaces",
+        "state_root": "/data/sandbox_manager/state",
+        "max_upload_mb": 512,
+        "max_user_workspace_gb": 20
+      },
+      "opencode": {
+        "expected_version": "1.18.29",
+        "health_path": "/global/health",
+        "doc_path": "/doc",
+        "event_path": "/event",
+        "startup_disable_autoupdate": true,
+        "startup_disable_models_fetch": true,
+        "startup_disable_default_plugins": true,
+        "startup_disable_lsp_download": true,
+        "share_disabled": true
+      },
+      "model_gateway": {
+        "base_url": "http://host.docker.internal:8104/v1",
+        "health_url": "http://127.0.0.1:8104/health/live",
+        "routing_strategy": "least-busy",
+        "request_timeout_seconds": 600
+      },
+      "metrics": {
+        "enabled": true,
+        "prometheus_path": "/metrics",
+        "prometheus_port": 9090,
+        "grafana_port": 3001
+      },
+      "performance": {
+        "controller_overhead_p95_ms": 100,
+        "sandbox_hot_acquire_p95_ms": 500,
+        "sandbox_cold_ready_p95_ms": 5000,
+        "ttft_gateway_overhead_p95_ms": 300
+      },
+      "load_capacity": {
+        "reserved_cpu": 1.0,
+        "reserved_memory_mb": 1024,
+        "reserve_fraction": 0.1,
+        "max_cpu_usage_percent": 90.0
+      }
+    },
+    "agents_root": "/data/sandbox_manager/agents",
+    "workspace_root": "/workspaces",
+    "state_root": "/data/sandbox_manager/state",
+    "runtime_uid": 10001,
+    "runtime_gid": 10001,
+    "logging": {
+      "max_bytes": 10485760,
+      "backup_count": 5
+    }
+  }
+}

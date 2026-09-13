@@ -1,0 +1,15 @@
+{
+  "module_id": "api_gateway",
+  "version": "1.0.0",
+  "entrypoint": "api_gateway.main",
+  "build": {
+    "sources": [
+      "api_gateway"
+    ],
+    "shared_libs": {
+      "version": "1.0.0",
+      "source": "shared_libs"
+    },
+    "requirements": "api_gateway/requirements.lock"
+  }
+}

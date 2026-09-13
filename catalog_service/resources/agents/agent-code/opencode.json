@@ -1,0 +1,33 @@
+{
+  "$schema": "https://opencode.ai/config.json",
+  "share": "disabled",
+  "autoupdate": false,
+  "plugin": ["file:///opt/agent/plugins/trace.mjs"],
+  "lsp": false,
+  "permission": "allow",
+  "enabled_providers": [
+    "cloud-model-gateway"
+  ],
+  "model": "cloud-model-gateway/coding-fast",
+  "instructions": [
+    "/opt/agent/AGENTS.md",
+    "/opt/agent/skills/*/SKILL.md"
+  ],
+  "provider": {
+    "cloud-model-gateway": {
+      "npm": "@ai-sdk/openai-compatible",
+      "name": "Cloud Model Gateway",
+      "options": {
+        "baseURL": "http://host.docker.internal:4001/v1"
+      },
+      "models": {
+        "coding-fast": {
+          "name": "Coding Fast"
+        },
+        "coding-quality": {
+          "name": "Coding Quality"
+        }
+      }
+    }
+  }
+}
