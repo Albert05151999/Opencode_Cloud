@@ -6,7 +6,7 @@ from types import SimpleNamespace
 
 import httpx
 import uvicorn
-from fastapi import FastAPI
+from fastapi import FastAPI, Request
 from fastapi.responses import StreamingResponse
 
 from admin_web.local_service.runtime import LocalServer, until_stopped
@@ -34,15 +34,24 @@ class LocalShutdownTests(unittest.IsolatedAsyncioTestCase):
         self.assertTrue(closed.is_set())
 
     async def test_shutdown_ends_live_proxy_without_browser_disconnect(self):
+        await self.proxy_case(True)
+
+    async def test_browser_disconnect_closes_idle_upstream_without_shutdown(self):
+        await self.proxy_case(False)
+
+    async def proxy_case(self, shutdown):
         upstream = FastAPI()
         closed = asyncio.Event()
 
         @upstream.get("/event")
-        async def event():
+        async def event(request: Request):
             async def stream():
                 try:
                     yield b"data: {}\n\n"
-                    await asyncio.Event().wait()
+                    # Observe transport disconnect explicitly even with ASGI 2.4,
+                    # whose idle StreamingResponse does not poll receive itself.
+                    while not await request.is_disconnected():
+                        await asyncio.sleep(0.01)
                 finally:
                     closed.set()
 
@@ -79,13 +88,14 @@ class LocalShutdownTests(unittest.IsolatedAsyncioTestCase):
                         self.assertEqual(response.status_code, 200)
                         chunks = response.aiter_raw()
                         self.assertIn(b"data:", await anext(chunks))
-                        server.should_exit = True
-                        # Browser keeps the stream open throughout server shutdown.
-                        await asyncio.wait_for(asyncio.shield(task), 1.5)
-                        with self.assertRaises(StopAsyncIteration):
-                            await anext(chunks)
-                        await asyncio.wait_for(closed.wait(), 1)
-                        self.assertTrue(app.state.stopping.is_set())
+                        if shutdown:
+                            server.should_exit = True
+                            # Browser keeps the stream open throughout server shutdown.
+                            await asyncio.wait_for(asyncio.shield(task), 1.5)
+                            with self.assertRaises(StopAsyncIteration):
+                                await anext(chunks)
+                    await asyncio.wait_for(closed.wait(), 1)
+                    self.assertEqual(app.state.stopping.is_set(), shutdown)
         finally:
             for server in servers:
                 server.should_exit = True

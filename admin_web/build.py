@@ -3,6 +3,7 @@
 import argparse
 import hashlib
 import json
+import os
 from pathlib import Path
 import shutil
 import subprocess
@@ -14,7 +15,7 @@ ROOT = Path(__file__).resolve().parent
 
 def main():
     parser = argparse.ArgumentParser()
-    parser.add_argument("--version", default="0.3.0")
+    parser.add_argument("--version", default=(ROOT.parent / "VERSION").read_text().strip())
     parser.add_argument(
         "--output", type=Path, default=ROOT.parent / "artifacts/admin_web"
     )
@@ -26,8 +27,11 @@ def main():
     ):
         parser.error("version must be a safe path segment")
     if not args.skip_frontend:
-        subprocess.run(["npm", "ci"], cwd=ROOT / "frontend", check=True)
-        subprocess.run(["npm", "run", "build"], cwd=ROOT / "frontend", check=True)
+        npm = shutil.which("npm.cmd" if os.name == "nt" else "npm")
+        if not npm:
+            parser.error("Node.js/npm is required to build the frontend")
+        subprocess.run([npm, "ci"], cwd=ROOT / "frontend", check=True)
+        subprocess.run([npm, "run", "build"], cwd=ROOT / "frontend", check=True)
     if not (ROOT / "frontend/dist/index.html").is_file():
         parser.error("frontend build missing")
     output = args.output / args.version
@@ -36,12 +40,13 @@ def main():
     with tempfile.TemporaryDirectory() as temporary:
         package = Path(temporary) / "admin_web"
         package.mkdir()
-        for name in ("local_service", "scripts", "docs", "log"):
+        for name in ("local_service", "scripts", "docs"):
             shutil.copytree(
                 ROOT / name,
                 package / name,
                 ignore=shutil.ignore_patterns("__pycache__", "*.pyc"),
             )
+        (package / "log").mkdir()
         shutil.copytree(ROOT / "frontend/dist", package / "frontend/dist")
         for name in ("__init__.py", "module.yaml", "config.schema.json"):
             shutil.copy2(ROOT / name, package / name)

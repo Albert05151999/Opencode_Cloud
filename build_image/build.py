@@ -2,6 +2,7 @@
 """Explicit-context builds and source-free offline server releases (Linux amd64)."""
 from __future__ import annotations
 import argparse
+import base64
 import hashlib
 import json
 import re
@@ -91,6 +92,31 @@ def copy_source(root, source, output):
     else:
         shutil.copy2(path, target)
 
+def stage_node_archive(root, output, version_args):
+    downloads = output / 'runtime-downloads'
+    downloads.mkdir()
+    archive_name = f"node-v{version_args['NODE_VERSION']}-linux-x64.tar.xz"
+    cached_archive = root / 'artifacts/env/node-download' / archive_name
+    if cached_archive.exists():
+        if cached_archive.is_symlink() or file_hash(cached_archive) != version_args['NODE_ARCHIVE_SHA256']:
+            raise ValueError('Cached Node archive does not match pinned SHA256')
+        shutil.copy2(cached_archive, downloads / archive_name)
+
+
+def stage_npm_archives(root, output):
+    packages = json.loads((root / 'agent_runtime/image/package-lock.json').read_text())['packages']
+    for name in ('opencode-ai', 'opencode-linux-x64', 'opencode-linux-x64-baseline'):
+        package = packages['node_modules/' + name]
+        archive_name = f"{name}-{package['version']}.tgz"
+        source = root / 'artifacts/env/npm-download' / archive_name
+        if not source.exists():
+            continue
+        integrity = 'sha512-' + base64.b64encode(hashlib.sha512(source.read_bytes()).digest()).decode('ascii')
+        if source.is_symlink() or integrity != package['integrity']:
+            raise ValueError('Cached npm archive does not match lock integrity: ' + name)
+        shutil.copy2(source, output / 'runtime-downloads' / archive_name)
+
+
 def prepare_module(module, profile='production', root=ROOT, artifacts=None):
     root = Path(root)
     artifacts = Path(artifacts or root / 'artifacts')
@@ -117,6 +143,8 @@ def prepare_module(module, profile='production', root=ROOT, artifacts=None):
     recipe = root / spec['recipe']
     shutil.copy2(recipe, output / 'Dockerfile')
     if module == 'agent_runtime':
+        stage_node_archive(root, output, version_args)
+        stage_npm_archives(root, output)
         for name in ('runtime-config.py','runtime-log.py'):
             shutil.copy2(root / 'build_image/modules/agent_runtime' / name, output / name)
     elif module == 'nginx':
@@ -272,13 +300,13 @@ def include_seed_tools(root, release):
     for source in (root / 'config/tooling').glob('*.py'):
         if source.is_symlink(): raise ValueError('Seed tooling source cannot be a symlink')
         shutil.copy2(source,package / 'tooling' / source.name)
-    seed_name = 'models.example.json'
-    read_seed(root / 'config',seed_name)  # Reject accidental cleartext credential edits before bundling.
-    source = root / 'config/catalog_service/seeds' / seed_name
-    if source.is_symlink(): raise ValueError('Seed example cannot be a symlink')
-    target = release / 'config/catalog_service/seeds' / seed_name
-    target.parent.mkdir(parents=True,exist_ok=True)
-    shutil.copy2(source,target)
+    for seed_name in ('models.example.json', 'models.minimax-glm.json'):
+        read_seed(root / 'config',seed_name)
+        source = root / 'config/catalog_service/seeds' / seed_name
+        if source.is_symlink(): raise ValueError('Seed example cannot be a symlink')
+        target = release / 'config/catalog_service/seeds' / seed_name
+        target.parent.mkdir(parents=True,exist_ok=True)
+        shutil.copy2(source,target)
     example = root / 'config/catalog_service/.env.example'
     if example.is_symlink(): raise ValueError('Environment example cannot be a symlink')
     # The distribution template permits instructions and blank assignments only.
@@ -289,8 +317,50 @@ def include_seed_tools(root, release):
     shutil.copy2(example,release / 'config/catalog_service/.env.example')
 
 
-def bundle(profile='production', mode='ip', prepare_only=False, root=ROOT, artifacts=None, docker_materials=None):
+def archive_release(release, archive, version):
+    prefix = f'release-{version}'
+    def permissions(info):
+        # NTFS/Windows does not preserve Unix execute bits; normalize release modes.
+        if info.name == prefix + '/.env':
+            info.mode = 0o600
+        elif info.isdir() or (info.isfile() and info.name.endswith('.sh')):
+            info.mode = 0o755
+        return info
+    with tarfile.open(archive, 'w:gz') as tar:
+        tar.add(release, arcname=prefix, filter=permissions)
+
+
+def bundle(profile='production', mode='ip', prepare_only=False, root=ROOT, artifacts=None, docker_materials=None, env_file=None, model_seed=None):
     root = Path(root); artifacts = Path(artifacts or root / 'artifacts')
+    from config.tooling.deployment_env import DEFAULTS, private_environment, serialize
+    from config.tooling.seed import read_seed, resolve, read_env_file, REF
+    from config.tooling.bootstrap import presets
+    env_file = Path(env_file) if env_file is not None else (root / '.env' if (root / '.env').is_file() else None)
+    values = {**DEFAULTS, **(read_env_file(env_file) if env_file else {})}
+    initialization = presets(root / 'config', values)
+    selected_seed = read_seed(root / 'config', model_seed) if model_seed else None
+    bootstrap_source = None
+    if values['BOOTSTRAP_BUNDLE']:
+        bootstrap_source = (root / values['BOOTSTRAP_BUNDLE']).resolve()
+        if not bootstrap_source.is_file():
+            raise ValueError('BOOTSTRAP_BUNDLE must reference an existing configuration export')
+    references = set()
+    def collect(value):
+        if isinstance(value, dict):
+            for child in value.values(): collect(child)
+        elif isinstance(value, list):
+            for child in value: collect(child)
+        elif isinstance(value, str) and (match := REF.fullmatch(value)):
+            references.add(match[1])
+    collect(selected_seed)
+    # Validate before replacing a release, and never copy credentials into contexts.
+    private_env = private_environment(env_file, sorted(references)) if env_file is not None else None
+    if bootstrap_source:
+        # Keep only the curated private fields; normalize the bundled file path.
+        private_env = private_env.replace("BOOTSTRAP_BUNDLE='" + values['BOOTSTRAP_BUNDLE'] + "'", "BOOTSTRAP_BUNDLE='bootstrap/config.json'")
+    if selected_seed and env_file:
+        values = {**DEFAULTS, **read_env_file(env_file)}
+        resolve(selected_seed, values)  # Fail before building if an enabled account lacks credentials.
     version = release_version(root)
     preflight_bundle(profile,mode,root)
     release = artifacts / 'releases' / version
@@ -306,6 +376,11 @@ def bundle(profile='production', mode='ip', prepare_only=False, root=ROOT, artif
         tags['nginx'], configs['nginx'] = build_module('nginx', profile, prepare_only, root, artifacts)
     dump(release / 'compose.json', compose_document(tags, configs, mode))
     include_seed_tools(root,release)
+    if bootstrap_source:
+        (release / 'bootstrap').mkdir()
+        shutil.copy2(bootstrap_source, release / 'bootstrap/config.json')
+    if selected_seed:
+        dump(release / 'config/catalog_service/seeds/models.default.json', selected_seed)
     scripts = artifacts / 'scripts/server'; scripts.mkdir(parents=True, exist_ok=True)
     for source in (root / 'build_image/bundle').glob('*.sh'):
         shutil.copy2(source, release / source.name); shutil.copy2(source, scripts / source.name)
@@ -314,8 +389,12 @@ def bundle(profile='production', mode='ip', prepare_only=False, root=ROOT, artif
     shutil.copy2(root / 'build_image/docker/install-docker.sh', scripts / 'install-docker.sh')
     if docker_materials:
         shutil.copytree(docker_materials, release / 'docker', dirs_exist_ok=True)
-    (release / '.env.example').write_text('SERVICE_TOKEN=\nADMIN_TOKEN=\nMODEL_GATEWAY_TOKEN=\nDEPLOY_ROOT=\nCOMPOSE_PROJECT_NAME=opencode_cloud\nAPI_PORT=18080\nHTTPS_PORT=443\nDOCKER_BRIDGE_IP=\n')
-    dump(release / 'manifest.json', {'version': version, 'profile': profile, 'mode': mode, 'platform': 'linux/amd64', 'images': tags, 'prepared_only': prepare_only})
+    (release / '.env.example').write_text(serialize(DEFAULTS), encoding='utf-8')
+    if private_env is not None:
+        with (release / '.env').open('w', encoding='utf-8', newline='\n') as stream:
+            (release / '.env').chmod(0o600)
+            stream.write(private_env)
+    dump(release / 'manifest.json', {'version': version, 'profile': profile, 'mode': mode, 'platform': 'linux/amd64', 'images': tags, 'prepared_only': prepare_only, 'private_environment': private_env is not None, 'model_seed': model_seed, 'preset_models': [m['id'] for m in initialization['models']], 'preset_agents': [a['agent_id'] for a in initialization['templates']]})
     if prepare_only: return release
     (release / 'images').mkdir()
     for module, tag in tags.items():
@@ -323,10 +402,10 @@ def bundle(profile='production', mode='ip', prepare_only=False, root=ROOT, artif
         archive.parent.mkdir(parents=True, exist_ok=True)
         run('docker', 'save', '-o', archive, tag)
         shutil.copy2(archive, release / 'images' / f'{module}.tar')
-    files = sorted(p for p in release.rglob('*') if p.is_file())
-    (release / 'SHA256SUMS').write_text(''.join(f'{file_hash(p)}  {p.relative_to(release)}\n' for p in files))
-    with tarfile.open(artifacts / 'releases' / f'release-{version}.tar.gz', 'w:gz') as tar:
-        tar.add(release, arcname=f'release-{version}')
+    # Runtime .env is intentionally mutable (install fills host-specific fields).
+    files = sorted(p for p in release.rglob('*') if p.is_file() and p != release / '.env')
+    (release / 'SHA256SUMS').write_text(''.join(f'{file_hash(p)}  {p.relative_to(release).as_posix()}\n' for p in files), newline='\n')
+    archive_release(release, artifacts / 'releases' / f'release-{version}.tar.gz', version)
     return release
 
 def main():
@@ -338,10 +417,12 @@ def main():
         else:
             item.add_argument('--mode', choices=('ip', 'domain'), default='ip')
             item.add_argument('--docker-materials', type=Path)
+            item.add_argument('--env-file', type=Path, help='include selected server/model credentials in the private offline bundle (not image layers)')
+            item.add_argument('--model-seed', help='default model seed, relative to config/catalog_service/seeds')
         item.add_argument('--profile', default='production')
         item.add_argument('--prepare-only', action='store_true', help='render contexts/config/scripts without claiming built images')
     a = p.parse_args()
     if a.command == 'module': print(build_module(a.module, a.profile, a.prepare_only)[0])
-    else: print(bundle(a.profile, a.mode, a.prepare_only, docker_materials=a.docker_materials))
+    else: print(bundle(a.profile, a.mode, a.prepare_only, docker_materials=a.docker_materials, env_file=a.env_file, model_seed=a.model_seed))
 
 if __name__ == '__main__': main()

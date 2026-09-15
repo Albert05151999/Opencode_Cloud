@@ -1,3 +1,4 @@
+from shared_libs.model_routing import ROUTER_SETTINGS
 import asyncio, base64, copy, configparser, json, os, re, shutil, time, uuid
 from pathlib import Path
 from types import SimpleNamespace
@@ -201,12 +202,17 @@ class Compiler:
         }
         if cfg.get("small_model_id"):
             opencode["small_model"] = "cloud-model-gateway/" + cfg["small_model_id"]
+        config = self.backend.config
+        resources = {
+            "cpu_limit": cfg.get("cpu_limit") or config.sandbox.default_cpu,
+            "memory_mb": cfg.get("memory_mb") or config.sandbox.default_memory_mb,
+            "pids_limit": config.sandbox.default_pids,
+        }
         if preview:
-            return {"opencode": redact(opencode), "sources": sources}
+            return {"opencode": redact(opencode), "sources": sources, "resources": resources}
         (root / "opencode.json").write_text(
             json.dumps(opencode, ensure_ascii=False, indent=2), encoding="utf-8"
         )
-        config = self.backend.config
         ini = configparser.ConfigParser(interpolation=None)
         ini["agent"] = {
             "id": aid,
@@ -214,11 +220,7 @@ class Compiler:
             "image": config.sandbox.image,
             "idle_timeout_seconds": str(config.sandbox.idle_timeout_seconds),
         }
-        ini["resources"] = {
-            "cpu_limit": str(config.sandbox.default_cpu),
-            "memory_mb": str(config.sandbox.default_memory_mb),
-            "pids_limit": str(config.sandbox.default_pids),
-        }
+        ini["resources"] = {key: str(value) for key, value in resources.items()}
         ini["models"] = {
             "default": cfg["default_model_id"],
             "allowed": ",".join(cfg["allowed_model_ids"]),
@@ -238,7 +240,7 @@ class Compiler:
         ).load(aid)
         return root
 
-    def gateway_configuration(self, models, environment):
+    def gateway_configuration(self, models, environment, *, require_credentials=False):
         entries = []
         for model in models.values():
             if not model.get("enabled", True):
@@ -261,45 +263,14 @@ class Compiler:
                         }
                     )
             else:
-                prefix = {
-                    "openai-compatible": "openai",
-                    "openai": "openai",
-                    "anthropic": "anthropic",
-                    "google": "gemini",
-                }[model["provider"]]
-                params = {
-                    "model": prefix + "/" + model["upstream_model"],
-                    "api_key": model.get("api_key", ""),
-                    **model.get("parameters", {}),
-                }
-                if model.get("base_url"):
-                    params["api_base"] = model["base_url"]
-                if model.get("headers"):
-                    params["extra_headers"] = model["headers"]
-                entries.append(
-                    {
-                        "model_name": mid,
-                        "litellm_params": params,
-                        "model_info": {"id": mid},
-                    }
-                )
-                for index, base in enumerate(model.get("additional_base_urls", []), 1):
-                    entries.append(
-                        {
-                            "model_name": mid,
-                            "litellm_params": {**params, "api_base": base},
-                            "model_info": {"id": mid + "-extra-" + str(index)},
-                        }
-                    )
+                from shared_libs.model_routing import deployment_entries
+                try:
+                    entries.extend(deployment_entries(model, require_credentials=require_credentials))
+                except ValueError as error:
+                    fail(str(error))
         return {
             "model_list": entries,
-            "router_settings": {
-                "routing_strategy": "least-busy",
-                "num_retries": 2,
-                "timeout": 600,
-                "allowed_fails": 1,
-                "cooldown_time": 30,
-            },
+            "router_settings": dict(ROUTER_SETTINGS),
             "litellm_settings": {
                 "callbacks": ["prometheus", "cloud_logging.cloud_logger"],
                 "drop_params": False,

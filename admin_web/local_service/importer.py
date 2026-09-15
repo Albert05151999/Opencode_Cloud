@@ -161,6 +161,36 @@ class Importer:
         auth_path = data_home / "opencode/auth.json"
         if auth_path.is_file() and auth_path.stat().st_size < 2 * 1024**2:
             auth = jsonc(auth_path.read_text(encoding="utf-8-sig"))
+        return self.convert(config, auth)
+
+    def parse_text(self, text):
+        if not isinstance(text, str) or len(text.encode('utf-8')) > 2 * 1024**2:
+            fail("Configuration must be text no larger than 2 MiB")
+        try:
+            decoded = json.loads(text)
+            if isinstance(decoded, str):
+                text = decoded
+        except ValueError:
+            pass
+        config = jsonc(text)
+        unresolved = []
+        def references(value, path=''):
+            if isinstance(value, dict):
+                return {k: references(v, path + '.' + k) for k, v in value.items()}
+            if isinstance(value, list):
+                return [references(v, path) for v in value]
+            if isinstance(value, str) and re.search(r'\{(?:env|file):[^}]+\}', value):
+                unresolved.append(path)
+                return ''
+            return value
+        # Pasted text never grants access to local credential files or environment.
+        result = self.convert(references(config), {}, for_form=True)
+        result['unresolved'] = unresolved
+        return result
+
+    def convert(self, config, auth, *, for_form=False):
+        if not isinstance(config.get('provider', {}), dict):
+            fail('OpenCode provider must be an object')
         items, errors, source_models = [], [], {}
         adapters = {
             "@ai-sdk/openai-compatible": "openai-compatible",
@@ -191,7 +221,7 @@ class Importer:
                 key = options.get("apiKey") or (
                     credential.get("key") if credential.get("type") == "api" else None
                 )
-                if not key:
+                if not key and not for_form:
                     fail("API key unavailable (OAuth sessions cannot be imported)")
                 base = options.get("baseURL", defaults.get(adapter, ""))
                 url = urlparse(base)
@@ -225,7 +255,7 @@ class Importer:
                         "provider": adapter,
                         "upstream_model": model.get("id", mid),
                         "base_url": base,
-                        "api_key": key,
+                        "api_key": key or "",
                         "headers": options.get("headers", {}),
                         "parameters": dict(model.get("options", {})),
                         "enabled": True,
@@ -258,6 +288,9 @@ class Importer:
             )
         if not items:
             errors.append({"error": "No explicit supported model definitions found"})
+        if for_form:
+            return {"models": items, "errors": errors, "model": config.get("model"),
+                    "small_model": config.get("small_model")}
         self.previews = {
             k: v for k, v in self.previews.items() if v["expires"] > time.time()
         }

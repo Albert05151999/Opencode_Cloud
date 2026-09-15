@@ -77,10 +77,18 @@ def read_seed(root, name):
     return value
 
 
-def resolve(value, environ):
-    if isinstance(value,dict): return {key:resolve(item,environ) for key,item in value.items()}
-    if isinstance(value,list): return [resolve(item,environ) for item in value]
+def resolve(value, environ, *, optional=False):
+    if isinstance(value,dict):
+        result = {}
+        for key, item in value.items():
+            if key == 'deployments' and isinstance(item, list):
+                result[key] = [resolve(d, environ, optional=isinstance(d, dict) and d.get('enabled') is False) for d in item]
+            else:
+                result[key] = resolve(item, environ, optional=optional)
+        return result
+    if isinstance(value,list): return [resolve(item,environ,optional=optional) for item in value]
     if isinstance(value,str) and (match:=REF.fullmatch(value)):
+        if optional and not environ.get(match[1]): return ''
         if not environ.get(match[1]): raise ValueError(f'Missing seed environment reference: {match[1]}')
         return environ[match[1]]
     return value

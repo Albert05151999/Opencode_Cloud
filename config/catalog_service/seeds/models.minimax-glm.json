@@ -1,0 +1,46 @@
+{
+  "schema_version": 1,
+  "models": [
+    {
+      "id": "minimax",
+      "name": "MiniMax",
+      "provider": "openai-compatible",
+      "upstream_model": "${MINIMAX_MODEL}",
+      "base_url": "${MINIMAX_BASE_URL}",
+      "deployments": [
+        {
+          "id": "minimax-primary",
+          "api_key": "${MINIMAX_API_KEY}",
+          "enabled": true
+        },
+        {
+          "id": "minimax-secondary",
+          "api_key": "${MINIMAX_API_KEY_2}",
+          "enabled": false
+        }
+      ],
+      "enabled": true
+    },
+    {
+      "id": "glm",
+      "name": "GLM",
+      "provider": "openai-compatible",
+      "upstream_model": "${ZAI_MODEL}",
+      "base_url": "${ZAI_BASE_URL}",
+      "deployments": [
+        {
+          "id": "zai-primary",
+          "api_key": "${ZAI_API_KEY}",
+          "enabled": true
+        },
+        {
+          "id": "zai-secondary",
+          "api_key": "${ZAI_API_KEY_2}",
+          "enabled": false
+        }
+      ],
+      "enabled": true
+    }
+  ],
+  "templates": []
+}

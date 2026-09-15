@@ -48,14 +48,19 @@ RUN printf 'Types: deb\nURIs: https://snapshot.ubuntu.com/ubuntu/%s\nSuites: nob
     && test "$(python3 --version)" = "Python ${PYTHON_VERSION}" \
     && rm -rf /var/lib/apt/lists/*
 
+COPY runtime-downloads/ /tmp/runtime-downloads/
 RUN set -eux; \
     test "${TARGETARCH:-amd64}" = amd64; \
     archive="node-v${NODE_VERSION}-linux-x64.tar.xz"; \
     base_url="https://nodejs.org/dist/v${NODE_VERSION}"; \
-    curl --fail --location --retry 3 --max-time 180 "${base_url}/${archive}" --output "/tmp/${archive}"; \
-    curl --fail --location --retry 3 --max-time 30 "${base_url}/SHASUMS256.txt" --output /tmp/SHASUMS256.txt; \
+    if [ -f "/tmp/runtime-downloads/${archive}" ]; then \
+        cp "/tmp/runtime-downloads/${archive}" "/tmp/${archive}"; \
+    else \
+        curl --fail --location --retry 3 --max-time 180 "${base_url}/${archive}" --output "/tmp/${archive}"; \
+        curl --fail --location --retry 3 --max-time 30 "${base_url}/SHASUMS256.txt" --output /tmp/SHASUMS256.txt; \
+        cd /tmp; grep "  ${archive}$" SHASUMS256.txt | sha256sum --check -; \
+    fi; \
     cd /tmp; \
-    grep "  ${archive}$" SHASUMS256.txt | sha256sum --check -; \
     printf '%s  %s\n' "$NODE_ARCHIVE_SHA256" "$archive" | sha256sum --check -; \
     tar -xJf "${archive}" -C /opt; \
     for executable in node npm npx; do \
@@ -66,6 +71,9 @@ RUN set -eux; \
 
 COPY agent_runtime/image/package.json agent_runtime/image/package-lock.json /opt/opencode/
 RUN cd /opt/opencode \
+    && for archive in /tmp/runtime-downloads/*.tgz; do \
+        [ ! -f "$archive" ] || npm cache add "$archive" --ignore-scripts --no-audit --no-fund; \
+    done \
     && npm ci --ignore-scripts --no-audit --no-fund \
     && cd node_modules/opencode-ai && node postinstall.mjs \
     && ln -s /opt/opencode/node_modules/.bin/opencode /usr/local/bin/opencode \

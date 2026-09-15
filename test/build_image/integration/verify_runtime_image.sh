@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 project_dir=$(cd "$(dirname "$0")/../../.." && pwd)
+NODE_VERSION=$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1]))["NODE_VERSION"])' "$project_dir/config/build_image/versions.json")
 OPENCODE_VERSION=$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1]))["OPENCODE_VERSION"])' "$project_dir/config/build_image/versions.json")
 image=${RUNTIME_IMAGE:-opencode-cloud/agent_runtime:1.0.0}
 run_id="runtime-verify-$$"
@@ -20,16 +21,17 @@ cleanup() {
   esac
 }
 trap cleanup EXIT
-mkdir -p "$test_root/workspace" "$test_root/state" "$test_root/agent/global/opencode"
+mkdir -p "$test_root/workspace" "$test_root/state" "$test_root/log" "$test_root/agent/global/opencode"
 touch "$test_root/agent/global/opencode/.gitignore"
 cp "$project_dir/agent_runtime/image/opencode/global/opencode.json" "$test_root/agent/opencode.json"
-chmod -R a+rwX "$test_root/workspace" "$test_root/state"
+chmod -R a+rwX "$test_root/workspace" "$test_root/state" "$test_root/log"
 chmod -R a+rX "$test_root/agent"
 if [[ ${SKIP_BUILD:-0} != 1 ]]; then
   python3 "$project_dir/build_image/build.py" module agent_runtime --profile production
 fi
 test "$(docker image inspect "$image" --format '{{.Config.User}}')" = agent:agent
 docker run -d --init --name "$normal_name" -p 127.0.0.1::4096 \
+  --mount "type=bind,src=$test_root/log,dst=/runtime-log" \
   --mount "type=bind,src=$test_root/workspace,dst=/workspace" \
   --mount "type=bind,src=$test_root/state,dst=/state/opencode" \
   --mount "type=bind,src=$test_root/agent,dst=/opt/agent,readonly" "$image" >/dev/null
@@ -45,6 +47,7 @@ docker run --rm --entrypoint /opt/runtime/image-smoke.sh \
   --mount "type=bind,src=$test_root/state,dst=/state/opencode" "$image"
 docker rm -f "$normal_name" >/dev/null
 docker run -d --init --name "$readonly_name" --read-only --tmpfs /tmp:rw,nosuid,size=512m \
+  --mount "type=bind,src=$test_root/log,dst=/runtime-log" \
   -p 127.0.0.1::4096 \
   --mount "type=bind,src=$test_root/workspace,dst=/workspace" \
   --mount "type=bind,src=$test_root/state,dst=/state/opencode" \

@@ -39,7 +39,7 @@ class AgentCatalog:
         self,
         root: str | Path,
         *,
-        gateway_url: str = "http://host.docker.internal:4001/v1",
+        gateway_url: str = "http://host.docker.internal:8104/v1",
     ) -> None:
         self.root = Path(root).expanduser().absolute()
         self.gateway_url = gateway_url
@@ -126,7 +126,7 @@ class AgentCatalog:
         default: str,
         agent_path: Path,
         *,
-        gateway_url: str = "http://host.docker.internal:4001/v1",
+        gateway_url: str = "http://host.docker.internal:8104/v1",
     ) -> None:
         if config.get("share") != "disabled" or config.get("autoupdate") is not False:
             raise AgentDefinitionError("sharing must be disabled and autoupdate false")

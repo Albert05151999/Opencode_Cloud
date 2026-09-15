@@ -72,6 +72,7 @@ def make_router(configuration):
                 "timeout",
                 "allowed_fails",
                 "cooldown_time",
+                "enable_pre_call_checks",
             }
         },
     )

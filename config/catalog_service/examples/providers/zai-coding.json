@@ -4,7 +4,7 @@
       "npm": "@ai-sdk/openai-compatible",
       "options": {
         "baseURL": "https://api.z.ai/api/coding/paas/v4",
-        "apiKey": "{env:ZAI_CODING_API_KEY}"
+        "apiKey": "{env:ZAI_API_KEY}"
       },
       "models": {
         "glm-5.3": {

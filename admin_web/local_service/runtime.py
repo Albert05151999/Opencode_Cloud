@@ -1,6 +1,7 @@
 """Bounded local shutdown, including otherwise unbounded SSE responses."""
 
 import asyncio
+import anyio
 
 import uvicorn
 
@@ -22,12 +23,15 @@ async def until_stopped(source, stopping):
             except StopAsyncIteration:
                 break
     finally:
-        tasks = [task for task in (pending, stop) if task is not None]
-        for task in tasks:
-            if not task.done():
-                task.cancel()
-        await asyncio.gather(*tasks, return_exceptions=True)
-        await iterator.aclose()
+        # Finish cancellation once. A second cancellation during httpx.aclose()
+        # can mark a response closed while leaving its socket and lease alive.
+        with anyio.CancelScope(shield=True):
+            tasks = [task for task in (pending, stop) if task is not None]
+            for task in tasks:
+                if not task.done():
+                    task.cancel()
+            await asyncio.gather(*tasks, return_exceptions=True)
+            await iterator.aclose()
 
 
 class LocalServer(uvicorn.Server):

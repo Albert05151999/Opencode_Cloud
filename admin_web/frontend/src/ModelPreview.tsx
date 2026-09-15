@@ -42,6 +42,14 @@ export function ModelPreview({
       {error && <p className="notice warning">请完善模型表单后预览：{error}</p>}
       {result && (
         <>
+          <h3>实际映射</h3>
+          <p><code>cloud-model-gateway/{value.id}</code> → <code>model_name: {value.id}</code> → {result.gateway.length} 个启用部署</p>
+          <div className="table-scroll"><table><thead><tr><th>部署 ID</th><th>上游模型</th><th>地址</th><th>RPM / TPM / 权重</th></tr></thead>
+            <tbody>{result.gateway.map((entry: Dict) => <tr key={entry.model_info.id}>
+              <td>{entry.model_info.id}</td><td>{entry.litellm_params.model}</td><td>{entry.litellm_params.api_base || '协议默认地址'}</td>
+              <td>{entry.litellm_params.rpm || '—'} / {entry.litellm_params.tpm || '—'} / {entry.litellm_params.weight || '—'}</td>
+            </tr>)}</tbody></table></div>
+          <JsonConfig title="负载均衡策略" value={result.router_settings} />
           <JsonConfig title="模型网关条目 · 当前表单" value={result.gateway} />
           <JsonConfig
             title="Agent 选择此模型后的 opencode.json 片段"

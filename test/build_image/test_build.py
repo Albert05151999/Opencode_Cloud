@@ -108,7 +108,7 @@ def test_offline_archive_includes_all_images_and_verified_inventory(tmp_path, mo
     for line in (release / 'SHA256SUMS').read_text().splitlines():
         digest, name = line.split('  ', 1)
         assert hashlib.sha256((release / name).read_bytes()).hexdigest() == digest
-    with tarfile.open(tmp_path / 'releases/release-0.3.0.tar.gz') as archive:
+    with tarfile.open(tmp_path / f'releases/release-{build.VERSION}.tar.gz') as archive:
         assert not any('/admin_web/' in name or '/app/' in name for name in archive.getnames())
 
 

@@ -1,3 +1,4 @@
+import { waitForPublish } from "./publishing";
 import "./operations-design.css";
 import { RefreshCw, Layers, GitBranch, Send } from "lucide-react";
 import { useEffect, useState } from "react";
@@ -29,15 +30,9 @@ export function AgentTemplates({ onChanged }: { onChanged: () => void }) {
   }, []);
   async function job(path: string) {
     const j = await remote(path, "POST", {});
-    for (let i = 0; i < 150; i++) {
-      const value = await remote("/cloud/admin/jobs/" + j.job_id);
-      if (value.status === "succeeded") return;
-      if (["failed", "cancelled", "needs_recovery", "interrupted"].includes(value.status))
-        throw Error(value.error || value.status);
-      await new Promise((r) => setTimeout(r, 1000));
-    }
-    throw Error("仍在处理中，请在发布记录中查看");
+    await waitForPublish(j.job_id);
   }
+
   async function act(fn: () => Promise<void>) {
     setBusy(true);
     setMessage("");
@@ -89,14 +84,7 @@ export function AgentTemplates({ onChanged }: { onChanged: () => void }) {
                       { agent_id: Object.keys(catalog.agents)[0] },
                     );
                     if (result.job_id) {
-                      for (let i = 0; i < 150; i++) {
-                        const j = await remote(
-                          "/cloud/admin/jobs/" + result.job_id,
-                        );
-                        if (j.status === "succeeded") break;
-                        if (["failed", "cancelled", "needs_recovery", "interrupted"].includes(j.status)) throw Error(j.error || "请检查任务检查点与恢复状态");
-                        await new Promise((r) => setTimeout(r, 1000));
-                      }
+                      await waitForPublish(result.job_id);
                     }
                     setMessage("资源发布完成");
                   })

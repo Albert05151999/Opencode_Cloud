@@ -100,7 +100,7 @@ def create_app(data_root=None):
             base_url=os.environ.get(
                 "MODEL_GATEWAY_PUBLIC_URL",
                 options.get(
-                    "model_gateway_public_url", "http://host.docker.internal:4001/v1"
+                    "model_gateway_public_url", "http://host.docker.internal:8104/v1"
                 ),
             )
         ),
@@ -108,7 +108,7 @@ def create_app(data_root=None):
             image=os.environ.get(
                 "AGENT_RUNTIME_IMAGE",
                 options.get(
-                    "agent_runtime_image", "opencode-cloud-agent-runtime:0.4.0"
+                    "agent_runtime_image", "opencode-cloud/agent_runtime:1.0.0"
                 ),
             ),
             **{
@@ -229,7 +229,7 @@ def create_app(data_root=None):
                 "version": len(data["gateway_versions"]) + 1,
                 "models": models,
                 "configuration": runtime.gateway_configuration(
-                    models, dict(os.environ)
+                    models, dict(os.environ), require_credentials=True
                 ),
             }
         else:
@@ -464,7 +464,7 @@ def create_app(data_root=None):
     @app.get("/cloud/admin/provider-templates")
     def provider_templates():
         return json.loads(
-            (Path(__file__).parent / "src/provider_templates.json").read_text()
+            (Path(__file__).parent / "src/provider_templates.json").read_text(encoding='utf-8')
         )
 
     @app.post("/cloud/admin/models/config-preview")
@@ -473,12 +473,19 @@ def create_app(data_root=None):
 
         model = payload["model"]
         validate_model(model)
+        configuration = runtime.gateway_configuration({model['id']: model}, {})
         return redact(
             {
-                "gateway": runtime.gateway_configuration({model["id"]: model}, {})[
-                    "model_list"
-                ],
-                "agent": {},
+                "gateway": configuration['model_list'],
+                "router_settings": configuration['router_settings'],
+                "agent": {
+                    'model': 'cloud-model-gateway/' + model['id'],
+                    'provider': {'cloud-model-gateway': {
+                        'npm': '@ai-sdk/openai-compatible',
+                        'options': {'baseURL': config.model_gateway.base_url, 'apiKey': '{env:MODEL_GATEWAY_TOKEN}'},
+                        'models': {model['id']: {'name': model.get('name') or model['id']}},
+                    }},
+                },
             }
         )
 

@@ -6,6 +6,7 @@ import subprocess
 import sys
 from http.server import BaseHTTPRequestHandler,ThreadingHTTPServer
 import threading
+import pytest
 
 from build_image.build import ROOT, include_seed_tools
 
@@ -33,7 +34,8 @@ def test_extracted_release_dry_run_needs_no_source_or_real_env(tmp_path):
     assert all(b'DO_NOT_PACKAGE' not in path.read_bytes() for path in release.rglob('*') if path.is_file())
 
 
-def test_release_wrapper_passes_apply_revision_replace_and_local_credentials(tmp_path):
+@pytest.mark.parametrize('env_location', ['config/catalog_service/.env', '.env'])
+def test_release_wrapper_passes_apply_revision_replace_and_local_credentials(tmp_path, env_location):
     release=prepare_release(tmp_path)
     received=[]
     class Handler(BaseHTTPRequestHandler):
@@ -44,7 +46,9 @@ def test_release_wrapper_passes_apply_revision_replace_and_local_credentials(tmp
     server=ThreadingHTTPServer(('127.0.0.1',0),Handler);threading.Thread(target=server.serve_forever,daemon=True).start()
     env={key:value for key,value in os.environ.items() if key!='ADMIN_TOKEN' and not key.startswith('SEED_MODEL_')}
     env.update(SEED_PYTHON=sys.executable,API_BASE_URL=f'http://127.0.0.1:{server.server_port}')
-    (release/'config/catalog_service/.env').write_text('ADMIN_TOKEN=local-admin\nSEED_MODEL_API_KEY=local-upstream\nSEED_MODEL_NAME=local-model\nSEED_MODEL_BASE_URL=http://127.0.0.1:19090/v1\n')
+    (release/env_location).write_text('ADMIN_TOKEN=local-admin\nSEED_MODEL_API_KEY=local-upstream\nSEED_MODEL_NAME=local-model\nSEED_MODEL_BASE_URL=http://127.0.0.1:19090/v1\n')
+    if env_location != '.env':
+        (release/'.env').write_text('ADMIN_TOKEN=compose-admin\n')
     try:
         result=subprocess.run(['sh',str(release/'import-models.sh'),'--apply','--revision','7','--replace'],cwd=tmp_path,env=env,capture_output=True,text=True)
         assert result.returncode==0,result.stderr

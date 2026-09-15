@@ -51,7 +51,7 @@ def backend_config(config):
             SandboxConfig,
             dict(
                 runtime="docker",
-                image=values.get("image", "opencode-cloud-agent-runtime:0.3.0"),
+                image=values.get("image", "opencode-cloud/agent_runtime:1.0.0"),
                 opencode_internal_port=4096,
                 idle_timeout_seconds=1800,
                 start_timeout_seconds=60,
@@ -93,7 +93,7 @@ def backend_config(config):
             ModelGatewayConfig,
             dict(
                 base_url=values.get(
-                    "model_gateway_public_url", "http://host.docker.internal:4001/v1"
+                    "model_gateway_public_url", "http://host.docker.internal:8104/v1"
                 ),
                 health_url=config["services"]["model_gateway"] + "/health/ready",
                 routing_strategy="simple-shuffle",

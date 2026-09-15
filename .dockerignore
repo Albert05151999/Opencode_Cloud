@@ -7,3 +7,6 @@
 artifacts
 data
 log
+.env
+**/.env
+server.cfg

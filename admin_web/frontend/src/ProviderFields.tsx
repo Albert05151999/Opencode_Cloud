@@ -90,7 +90,7 @@ export function ProviderFields({
           }
         }}
       >
-        {busy ? "正在隔离环境测试…" : "测试当前表单（不保存、不发布）"}
+        {busy ? "正在隔离环境测试…" : value.deployments?.length > 1 ? "抽样测试模型（逐个验证请用账户测试）" : "测试当前表单（不保存、不发布）"}
       </button>
       {error && <p role="alert">{error}</p>}
       {result && (

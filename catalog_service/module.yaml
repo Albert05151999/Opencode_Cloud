@@ -1,6 +1,6 @@
 {
   "module_id": "catalog_service",
-  "version": "1.0.0",
+  "version": "1.0.2",
   "entrypoint": "catalog_service.main",
   "port": 8080,
   "health": {

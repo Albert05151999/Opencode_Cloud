@@ -169,6 +169,9 @@ export function FormConfigPreview({
         {loading && <p role="status">正在生成预览…</p>}
         {error && <p className="notice warning">请完善表单后预览：{error}</p>}
         {result && (
+          <JsonConfig title="沙箱资源 · 当前表单（未保存）" value={result.resources} note="cpu_limit 为核数，memory_mb 为 MiB；继承默认值时显示服务器实际配置。" />
+        )}
+        {result && (
           <JsonConfig
             title="opencode.json · 当前表单（未保存）"
             value={result.opencode}

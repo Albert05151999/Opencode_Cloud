@@ -28,7 +28,7 @@ def create_admin_router(store, runtime):
     @router.get("/cloud/capabilities")
     def capabilities():
         return {
-            "version": "0.3.0",
+            "version": "0.3.1",
             "sandbox_operations": True,
             "agent_archive": True,
             "configuration_preview": True,

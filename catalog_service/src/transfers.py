@@ -167,6 +167,14 @@ def parse_native(config):
     return items, warnings
 
 
+def has_credentials(model):
+    accounts = model.get("deployments")
+    if accounts:
+        enabled = [d for d in accounts if d.get("enabled", True)]
+        return bool(enabled) and all(d.get("api_key") not in (None, "", MASK) for d in enabled)
+    return model.get("api_key") not in (None, "", MASK)
+
+
 class Transfers:
     def __init__(self, store, runtime=None):
         self.store = store
@@ -272,10 +280,7 @@ class Transfers:
                         "models" if entry["kind"] == "model" else "resources"
                     ].get(entry["id"])
                     entry["conflict"] = bool(existing)
-                    if entry["kind"] == "model" and (
-                        not entry["data"].get("api_key")
-                        or entry["data"].get("api_key") == MASK
-                    ):
+                    if entry["kind"] == "model" and not has_credentials(entry["data"]):
                         entry.setdefault("warnings", []).append(
                             "API key missing: new model will remain disabled until configured"
                         )
@@ -380,7 +385,9 @@ class Transfers:
                     model = preserve_secrets(entry["data"], old or {})
                     model["id"] = target
                     model["api_key"] = model.get("api_key") or ""
-                    if not model.get("api_key"):
+                    for account in model.get("deployments", []):
+                        account["api_key"] = account.get("api_key") or ""
+                    if not has_credentials(model):
                         model["enabled"] = False
                     validate_model(model)
                     if (

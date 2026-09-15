@@ -64,10 +64,22 @@ def preserve_secrets(new, old):
     if new == MASK:
         return copy.deepcopy(old)
     if isinstance(new, dict):
+        previous = old if isinstance(old, dict) else {}
+        if new.get('deployments') and not previous.get('deployments') and previous.get('api_key'):
+            previous = {**previous, 'deployments': [
+                {'id': 'primary', 'api_key': previous['api_key']},
+                *[{'id': f'extra-{i}', 'api_key': previous['api_key']}
+                  for i, _ in enumerate(previous.get('additional_base_urls', []), 1)],
+            ]}
         return {
-            k: preserve_secrets(v, old.get(k) if isinstance(old, dict) else None)
+            k: preserve_secrets(v, previous.get(k))
             for k, v in new.items()
         }
+    if isinstance(new, list):
+        # Deployment credentials follow stable identity, never their row position.
+        previous = {item['id']: item for item in (old or []) if isinstance(item, dict) and 'id' in item}
+        return [preserve_secrets(item, previous.get(item.get('id'), {}))
+                if isinstance(item, dict) and 'id' in item else copy.deepcopy(item) for item in new]
     return new
 
 
@@ -246,6 +258,7 @@ def validate_model(model):
         "base_url",
         "additional_base_urls",
         "api_key",
+        "deployments",
         "headers",
         "parameters",
         "context",
@@ -305,6 +318,14 @@ def validate_model(model):
             not isinstance(model[key], int) or model[key] < 1
         ):
             fail("Model token limits must be positive integers")
+    if model.get('provider') != 'legacy':
+        from shared_libs.model_routing import deployment_entries
+        try:
+            deployment_entries(model)
+        except ValueError as error:
+            fail(str(error))
+    elif model.get('deployments'):
+        fail('Convert the legacy model before adding deployments')
     return model
 
 
@@ -424,77 +445,22 @@ class ManagementStore:
             if data.get("bootstrapped"):
                 return
             data["bootstrapped"] = True
-            for config in sorted(self.agents_root.glob("*/agent.cfg")):
-                cfg = configparser.ConfigParser(interpolation=None)
-                cfg.read(config, encoding="utf-8")
-                aid = cfg["agent"]["id"]
-                models = cfg["models"]["allowed"].split(",")
-                for mid in models:
-                    data["models"].setdefault(
-                        mid,
-                        {
-                            "id": mid,
-                            "name": mid,
-                            "provider": "legacy",
-                            "upstream_model": mid,
-                            "enabled": False,
-                            "legacy": True,
-                        },
-                    )
-                bindings = []
-                for skill in sorted((config.parent / "skills").glob("*/SKILL.md")):
-                    meta = skill_metadata(skill.read_bytes())
-                    rid = identifier(aid + "-" + skill.parent.name)
-                    files = {
-                        p.relative_to(skill.parent).as_posix(): self.blob(
-                            p.read_bytes()
-                        )
-                        for p in skill.parent.rglob("*")
-                        if p.is_file() and not p.is_symlink()
-                    }
-                    version = {
-                        "version": 1,
-                        "created": time.time(),
-                        "data": meta,
-                        "files": files,
-                    }
-                    data["resources"][rid] = {
-                        "id": rid,
-                        "kind": "skill",
-                        "name": meta["name"],
-                        "owner": aid,
-                        "archived": False,
-                        "draft": {"data": meta, "files": files},
-                        "versions": [version],
-                    }
-                    bindings.append({"id": rid, "version": 1})
-                draft = {
-                    "name": cfg["agent"]["display_name"],
-                    "description": "",
-                    # Fresh installs retain the bundled Agents and resources,
-                    # but they cannot run until a configured model is assigned.
-                    "enabled": False,
-                    "instructions": (config.parent / "AGENTS.md").read_text(
-                        encoding="utf-8"
-                    ),
-                    "allowed_model_ids": models,
-                    "default_model_id": cfg["models"]["default"],
-                    "small_model_id": None,
-                    "bindings": bindings,
-                }
-                data["agents"][aid] = {
-                    "id": aid,
-                    "draft": draft,
-                    "versions": [
-                        {
-                            "version": 1,
-                            "created": time.time(),
-                            "config": copy.deepcopy(draft),
-                            "path": str(config.parent.resolve()),
-                        }
-                    ],
-                    "active": 1,
-                }
+            # Bundled examples are templates, never active business records.
+            for kind, model in (("code", "glm"), ("data", "minimax")):
+                folder = self.agents_root / ("agent-" + kind)
+                instructions = folder / "AGENTS.md"
+                data.setdefault("agent_templates", {}).setdefault("example-" + kind, {
+                    "id": "example-" + kind,
+                    "name": "Code 示例" if kind == "code" else "Data 示例",
+                    "config": {
+                        "name": "Code" if kind == "code" else "Data",
+                        "description": "可编辑的内置示例，恢复后需要发布。",
+                        "enabled": True,
+                        "instructions": instructions.read_text(encoding="utf-8") if instructions.exists() else "",
+                        "allowed_model_ids": [model], "default_model_id": model,
+                        "small_model_id": None, "bindings": [],
+                    },
+                })
 
     @staticmethod
     def resource_version(data, rid, version):
@@ -516,6 +482,13 @@ class ManagementStore:
         return version["config"] if version else None
 
     def validate_agent(self, data, aid, cfg):
+        for field, choices in (
+            ("cpu_limit", (1, 2, 4, 8)),
+            ("memory_mb", (1024, 2048, 4096, 8192)),
+        ):
+            value = cfg.get(field)
+            if value is not None and (type(value) is not int or value not in choices):
+                fail(f"{field} must be one of {choices}, or null for server default")
         allowed = cfg.get("allowed_model_ids", [])
         if (
             not isinstance(allowed, list)

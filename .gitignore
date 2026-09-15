@@ -25,6 +25,7 @@ admin_web/frontend/dist/
 admin_web/frontend/test-results/
 admin_web/frontend/playwright-report/
 /tmp.cfg
+/server.cfg
 
 # Local planning state and macOS metadata.
 /.planning/

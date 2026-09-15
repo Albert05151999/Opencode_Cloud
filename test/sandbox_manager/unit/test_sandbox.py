@@ -169,8 +169,8 @@ def make_config(tmp_path: Path, *, timeout: float = 1) -> AppConfig:
             "1.2.3", "/global/health", "/doc", "/event", True, True, True, True, True
         ),
         ModelGatewayConfig(
-            "http://127.0.0.1:4001",
-            "http://127.0.0.1:4001/health/liveliness",
+            "http://127.0.0.1:8104",
+            "http://127.0.0.1:8104/health/liveliness",
             "usage-based-routing",
             30,
         ),
@@ -211,7 +211,7 @@ def backend_factory(tmp_path: Path):
                             "cloud-model-gateway": {
                                 "npm": "@ai-sdk/openai-compatible",
                                 "options": {
-                                    "baseURL": "http://host.docker.internal:4001/v1"
+                                    "baseURL": "http://host.docker.internal:8104/v1"
                                 },
                                 "models": {model: {}},
                             }

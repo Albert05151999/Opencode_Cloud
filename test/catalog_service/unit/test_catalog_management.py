@@ -26,6 +26,8 @@ SKILL = b"---\nname: sample\ndescription: Test skill\n---\nUse this skill."
 @pytest.fixture
 def store(tmp_path):
     value = ManagementStore(tmp_path / "management", ROOT / "agents")
+    from test.catalog_service.legacy_fixture import populate_legacy
+    populate_legacy(value)
     with value.edit() as data:
         for model in data["models"].values():
             model["enabled"] = True
@@ -35,27 +37,16 @@ def store(tmp_path):
     return value
 
 
-def test_fresh_bootstrap_keeps_defaults_disabled_without_rewriting_existing_data(tmp_path):
+def test_fresh_bootstrap_is_empty_and_preserves_existing_configuration(tmp_path):
     root = tmp_path / "management"
     store = ManagementStore(root, ROOT / "agents")
     _, data = store.read()
-    assert data["models"] and all(
-        model["legacy"] and model["enabled"] is False
-        for model in data["models"].values()
-    )
-    assert data["agents"] and all(
-        agent["draft"]["enabled"] is False
-        and store.agent_config(agent)["enabled"] is False
-        for agent in data["agents"].values()
-    )
+    assert data["models"] == {} and data["agents"] == {} and data["resources"] == {}
+    assert set(data["agent_templates"]) == {"example-code", "example-data"}
     with store.edit() as existing:
-        existing["models"]["coding-fast"]["enabled"] = True
-        existing["agents"]["agent-code"]["draft"]["enabled"] = True
-        existing["agents"]["agent-code"]["versions"][0]["config"]["enabled"] = True
+        existing["models"]["user-model"] = {"id": "user-model", "enabled": False}
     reopened = ManagementStore(root, ROOT / "agents")
-    _, persisted = reopened.read()
-    assert persisted["models"]["coding-fast"]["enabled"] is True
-    assert reopened.agent_config(persisted["agents"]["agent-code"])["enabled"] is True
+    assert "user-model" in reopened.read()[1]["models"]
 
 
 def test_disabled_legacy_is_skipped_but_enabled_legacy_still_requires_environment(
@@ -67,8 +58,8 @@ def test_disabled_legacy_is_skipped_but_enabled_legacy_still_requires_environmen
         "model_list"
     ] == []
     enabled = copy.deepcopy(data["models"])
-    enabled["coding-fast"]["enabled"] = True
-    with pytest.raises(HTTPException, match="missing model coding-fast"):
+    enabled["glm"] = {"id": "glm", "legacy": True, "enabled": True}
+    with pytest.raises(HTTPException, match="missing model glm"):
         ManagementRuntime.gateway_configuration(None, enabled, {})
 
 
@@ -88,9 +79,9 @@ def test_migration_and_copy_keep_private_resources_isolated(store):
 
 def test_revisions_and_model_reference_protection(store):
     revision, data = store.read()
-    model = dict(data["models"]["coding-fast"], enabled=False)
+    model = dict(data["models"]["glm"], enabled=False)
     with pytest.raises(HTTPException, match="referenced"):
-        store.save_model("coding-fast", model, revision)
+        store.save_model("glm", model, revision)
     model = {
         "id": "new-model",
         "name": "New",
@@ -196,7 +187,7 @@ def test_managed_model_validation_and_native_config_write(store):
             "agent-code",
             "POST",
             "session/ses_x/prompt_async",
-            {"model": {"providerID": "cloud-model-gateway", "modelID": "data-fast"}},
+            {"model": {"providerID": "cloud-model-gateway", "modelID": "minimax"}},
         )
     assert e.value.status_code == 403
     with pytest.raises(HTTPException):
@@ -235,8 +226,7 @@ def test_effective_config_uses_skill_discovery_and_preserves_trace(store):
     assert "^msg_([0-9a-f]{32})$" in system_trace
     assert "output.headers.traceparent" in system_trace
     assert set(cfg["provider"]["cloud-model-gateway"]["models"]) == {
-        "coding-fast",
-        "coding-quality",
+        "glm",
     }
 
 
@@ -245,6 +235,7 @@ def test_configuration_previews_are_read_only_and_mask_gateway_headers(store):
     runtime.store = store
     runtime.backend = SimpleNamespace(
         config=SimpleNamespace(
+            sandbox=SimpleNamespace(default_cpu=4, default_memory_mb=4096, default_pids=512),
             model_gateway=SimpleNamespace(base_url="http://127.0.0.1:4001/v1")
         )
     )

@@ -241,9 +241,9 @@ export function LoadTests() {
                 <div className="ops-metric"><span>CPU 使用率</span><strong>{number(capacity!.cpu_usage_percent, "%")}</strong><meter min={0} max={100} value={capacity!.cpu_usage_percent || 0} aria-label="CPU 使用率" /></div>
                 <div className="ops-metric"><span>实际可用内存</span><strong>{number(capacity!.memory_available_mb, " MiB")}</strong><small>系统实时采样</small></div>
                 <div className="ops-metric"><span>还能分配</span><strong>{number(capacity!.remaining_cpu, " 核")}</strong><small>{number(capacity!.remaining_memory_mb, " MiB")} 内存配额</small></div>
-                <div className="ops-metric"><span>运行中沙箱</span><strong>{capacity!.running_sandboxes}</strong><small>已分配 {number(capacity!.allocated_cpu, " 核")} / {number(capacity!.allocated_memory_mb, " MiB")}</small></div>
+                <div className="ops-metric"><span>运行中沙箱</span><strong>{capacity!.running_sandboxes}</strong><small>全机容器配额合计 {number(capacity!.allocated_cpu, " 核")} / {number(capacity!.allocated_memory_mb, " MiB")}</small></div>
               </div>
-              <p className="ops-caption">系统预留 {number(capacity!.reserved_cpu, " 核")} / {number(capacity!.reserved_memory_mb, " MiB")}。</p>
+              <p className="ops-caption">系统预留 {number(capacity!.reserved_cpu, " 核")} / {number(capacity!.reserved_memory_mb, " MiB")}。可分配额度按全机容器的资源上限计算，包含其他项目和可重启沙箱；实时使用率低不代表仍有配额。压测会创建额外沙箱。</p>
               <small>
                 采样时间{" "}
                 {new Date(capacity!.sampled_at * 1000).toLocaleTimeString()}，每

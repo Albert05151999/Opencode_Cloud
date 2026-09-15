@@ -5,6 +5,8 @@ from catalog_service.main import create_app
 
 
 def enable_seeded_defaults(app):
+    from test.catalog_service.legacy_fixture import populate_legacy
+    populate_legacy(app.state.store)
     with app.state.store.edit() as data:
         for model in data["models"].values():
             model["enabled"] = True
@@ -134,6 +136,9 @@ def test_missing_immutable_history_is_not_silently_recompiled(tmp_path, monkeypa
     from pathlib import Path
 
     monkeypatch.setenv("SERVICE_TOKEN", "token")
+    from test.catalog_service.legacy_fixture import populate_legacy
+    from catalog_service.src.management import ManagementStore
+    populate_legacy(ManagementStore(tmp_path, Path(__file__).resolve().parents[3] / 'catalog_service/resources/agents'))
     first = create_app(tmp_path)
     _, data = first.state.store.read()
     version = data["agents"]["agent-code"]["versions"][0]
@@ -155,6 +160,13 @@ def test_missing_immutable_history_is_not_silently_recompiled(tmp_path, monkeypa
 def test_disabled_model_import_and_update_preserve_disabled_agent_references(tmp_path,monkeypatch):
     monkeypatch.setenv("SERVICE_TOKEN","test-token")
     app=create_app(tmp_path)
+    from test.catalog_service.legacy_fixture import populate_legacy
+    populate_legacy(app.state.store)
+    with app.state.store.edit() as data:
+        for agent in data['agents'].values():
+            agent['draft']['enabled'] = False
+            for version in agent['versions']:
+                version['config']['enabled'] = False
     with TestClient(app,headers={"Authorization":"Bearer test-token"}) as client:
         _,data=app.state.store.read()
         mid=next(iter(data['models']))

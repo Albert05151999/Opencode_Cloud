@@ -9,8 +9,8 @@ from sandbox_manager.agents import AgentCatalog, AgentDefinitionError
 
 
 REPOSITORY_AGENTS = Path(__file__).resolve().parents[3] / "agent_runtime/resources/agents"
-FIXED_IMAGE = "sha256:c4166f5dfd4264e71685ebafe2729148f32e414e38508b277e3a357fb472fc66"
-GATEWAY_URL = "http://host.docker.internal:4001/v1"
+FIXED_IMAGE = "opencode-cloud/agent_runtime:" + json.loads((Path(__file__).resolve().parents[3] / "agent_runtime/module.yaml").read_text())["version"]
+GATEWAY_URL = "http://host.docker.internal:8104/v1"
 
 
 def test_repository_catalog_parses_exact_agent_contracts() -> None:
@@ -18,8 +18,8 @@ def test_repository_catalog_parses_exact_agent_contracts() -> None:
 
     assert set(definitions) == {"agent-code", "agent-data"}
     expected = {
-        "agent-code": ("coding-fast", ("coding-fast", "coding-quality")),
-        "agent-data": ("data-fast", ("data-fast", "data-quality")),
+        "agent-code": ("glm", ("glm",)),
+        "agent-data": ("minimax", ("minimax",)),
     }
     assert {definition.image for definition in definitions.values()} == {FIXED_IMAGE}
 

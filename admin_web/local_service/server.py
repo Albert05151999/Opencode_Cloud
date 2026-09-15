@@ -10,8 +10,10 @@ from pathlib import Path
 from urllib.parse import urlparse
 
 import httpx
+import anyio
 from fastapi import FastAPI, Body, Request, HTTPException
 from fastapi.responses import FileResponse, JSONResponse, StreamingResponse
+from starlette.datastructures import MutableHeaders
 
 from admin_web.local_service.importer import Importer
 from admin_web.local_service.configuration import load
@@ -20,6 +22,71 @@ from admin_web.local_service.runtime import until_stopped
 
 _TRACEPARENT = re.compile(r"00-([0-9a-f]{32})-([0-9a-f]{16})-0[01]")
 _CORRELATION_ID = re.compile(r"[A-Za-z0-9_.:-]{1,128}")
+
+
+class ClosingProxyResponse(StreamingResponse):
+    """Release idle upstream streams when a browser leaves, including ASGI 2.4."""
+
+    def __init__(self, *args, upstream, **kwargs):
+        self.upstream = upstream
+        super().__init__(*args, **kwargs)
+
+    async def __call__(self, scope, receive, send):
+        try:
+            async with anyio.create_task_group() as group:
+                async def stream():
+                    await self.stream_response(send)
+                    group.cancel_scope.cancel()
+                group.start_soon(stream)
+                await self.listen_for_disconnect(receive)
+                group.cancel_scope.cancel()
+        finally:
+            with anyio.CancelScope(shield=True):
+                await self.body_iterator.aclose()
+                await self.upstream.aclose()
+        if self.background is not None:
+            await self.background()
+
+
+class LocalProtection:
+    """Pure ASGI protection preserves disconnect signals for idle SSE streams."""
+
+    def __init__(self, app, csrf, stopping):
+        self.app, self.csrf, self.stopping = app, csrf, stopping
+
+    async def __call__(self, scope, receive, send):
+        if scope['type'] != 'http':
+            return await self.app(scope, receive, send)
+        request = Request(scope)
+        request.state.correlation = _correlation_headers(request.headers)
+        host = request.headers.get('host', '')
+        origin = request.headers.get('origin')
+        error = None
+        status = 403
+        if self.stopping.is_set():
+            error, status = 'Local service is shutting down', 503
+        elif host.split(':')[0] not in {'localhost', '127.0.0.1'}:
+            error = 'Localhost access only'
+        elif origin and origin != 'http://' + host:
+            error = 'Cross-origin access denied'
+        elif request.headers.get('sec-fetch-site') == 'cross-site':
+            error = 'Cross-site access denied'
+        elif request.method not in {'GET', 'HEAD', 'OPTIONS'} and not secrets.compare_digest(request.headers.get('x-local-csrf', ''), self.csrf):
+            error = 'Local session token required; refresh the page'
+        if error:
+            return await JSONResponse({'detail': error}, status)(scope, receive, send)
+
+        async def protected_send(message):
+            if message['type'] == 'http.response.start':
+                headers = MutableHeaders(scope=message)
+                headers.setdefault('traceparent', request.state.correlation['traceparent'])
+                headers.setdefault('x-cloud-request-id', request.state.correlation['x-cloud-request-id'])
+                headers.setdefault('x-cloud-trace-id', request.state.correlation['traceparent'].split('-')[1])
+                headers['X-Content-Type-Options'] = 'nosniff'
+                headers['Referrer-Policy'] = 'no-referrer'
+                headers['Cache-Control'] = 'no-store' if scope['path'].startswith(('/local/', '/remote/')) else 'no-cache'
+            await send(message)
+        await self.app(scope, receive, protected_send)
 
 
 def _correlation_headers(headers):
@@ -102,46 +169,7 @@ def create_local_app(root=None, connection=None):
     app.state.connection = connection
     app.state.stopping = asyncio.Event()
 
-    @app.middleware("http")
-    async def protect(request, call_next):
-        request.state.correlation = _correlation_headers(request.headers)
-        if app.state.stopping.is_set():
-            return JSONResponse({"detail": "Local service is shutting down"}, 503)
-        host = request.headers.get("host", "")
-        hostname = host.split(":")[0]
-        origin = request.headers.get("origin")
-        if hostname not in {"localhost", "127.0.0.1"}:
-            return JSONResponse({"detail": "Localhost access only"}, 403)
-        if origin and origin != "http://" + host:
-            return JSONResponse({"detail": "Cross-origin access denied"}, 403)
-        if request.headers.get("sec-fetch-site") == "cross-site":
-            return JSONResponse({"detail": "Cross-site access denied"}, 403)
-        if request.method not in {
-            "GET",
-            "HEAD",
-            "OPTIONS",
-        } and not secrets.compare_digest(request.headers.get("x-local-csrf", ""), csrf):
-            return JSONResponse(
-                {"detail": "Local session token required; refresh the page"}, 403
-            )
-        response = await call_next(request)
-        response.headers.setdefault(
-            "traceparent", request.state.correlation["traceparent"]
-        )
-        response.headers.setdefault(
-            "x-cloud-request-id", request.state.correlation["x-cloud-request-id"]
-        )
-        response.headers.setdefault(
-            "x-cloud-trace-id", request.state.correlation["traceparent"].split("-")[1]
-        )
-        response.headers["X-Content-Type-Options"] = "nosniff"
-        response.headers["Referrer-Policy"] = "no-referrer"
-        response.headers["Cache-Control"] = (
-            "no-store"
-            if request.url.path.startswith(("/local/", "/remote/"))
-            else "no-cache"
-        )
-        return response
+    app.add_middleware(LocalProtection, csrf=csrf, stopping=app.state.stopping)
 
     @app.get("/local/bootstrap")
     def bootstrap():
@@ -160,7 +188,7 @@ def create_local_app(root=None, connection=None):
         connection.save(payload["url"], token or "", payload.get("remember", False))
         return {"ok": True}
 
-    async def remote_json(method, path, payload=None, correlation=None):
+    async def remote_json(method, path, payload=None, correlation=None, allow_not_ready=False):
         headers = {"Authorization": "Bearer " + connection.token}
         headers.update(correlation or _correlation_headers({}))
         try:
@@ -172,21 +200,34 @@ def create_local_app(root=None, connection=None):
             )
         except httpx.HTTPError:
             raise HTTPException(
-                502, "Server connection failed; check address and network"
+                502, "无法连接服务器，请检查 API 地址、网络及端口。"
             )
+        if result.status_code == 401:
+            raise HTTPException(401, "管理员凭据验证失败，请填写服务器 ADMIN_TOKEN 的值，不含引号，并保存后重试。")
+        if result.status_code == 403:
+            raise HTTPException(403, "服务器拒绝访问，请检查管理员权限及入口访问限制。")
+        if allow_not_ready and result.status_code == 503:
+            try:
+                modules = result.json().get('modules', {})
+            except (ValueError, AttributeError):
+                modules = {}
+            known = {'catalog_service', 'file_service', 'model_gateway', 'operations', 'sandbox_manager', 'observability'}
+            return {'ok': False, 'modules': {k: v for k, v in modules.items() if k in known and type(v) is bool}} if isinstance(modules, dict) else {'ok': False, 'modules': {}}
         if result.status_code >= 400:
             raise HTTPException(
                 result.status_code,
-                "Server rejected the request; check credentials, capability and configuration",
+                f"服务器接口返回 HTTP {result.status_code}，请检查服务状态和 API 地址。",
             )
         return result.json()
 
     @app.post("/local/connection/test")
     async def test_connection(request: Request):
         correlation = request.state.correlation
+        capabilities = await remote_json("GET", "/cloud/capabilities", correlation=correlation)
         return {
-            "ready": await remote_json("GET", "/cloud/health/ready", correlation=correlation),
-            "capabilities": await remote_json("GET", "/cloud/capabilities", correlation=correlation),
+            "authenticated": True,
+            "ready": await remote_json("GET", "/cloud/health/ready", correlation=correlation, allow_not_ready=True),
+            "capabilities": capabilities,
         }
 
     @app.post("/local/opencode/discover")
@@ -196,6 +237,10 @@ def create_local_app(root=None, connection=None):
     @app.post("/local/opencode/preview")
     def preview(payload: dict = Body()):
         return importer.preview(payload["source_id"])
+
+    @app.post('/local/opencode/parse')
+    def parse_opencode(payload: dict = Body()):
+        return importer.parse_text(payload.get('text'))
 
     @app.post("/local/opencode/select-file")
     def select_config_file():
@@ -317,7 +362,8 @@ def create_local_app(root=None, connection=None):
                     # stream. End it normally so the browser reconnects and reloads
                     # history; do not turn an expected disconnect into an ASGI error.
             finally:
-                await response.aclose()
+                with anyio.CancelScope(shield=True):
+                    await response.aclose()
 
         forwarded = {
             k: v
@@ -333,8 +379,8 @@ def create_local_app(root=None, connection=None):
                 "x-cloud-request-id",
             }
         }
-        return StreamingResponse(
-            chunks(), status_code=response.status_code, headers=forwarded
+        return ClosingProxyResponse(
+            chunks(), upstream=response, status_code=response.status_code, headers=forwarded
         )
 
     dist = Path(__file__).resolve().parents[1] / "frontend/dist"

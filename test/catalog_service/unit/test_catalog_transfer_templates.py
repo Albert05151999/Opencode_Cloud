@@ -21,12 +21,15 @@ def test_invalid_template_is_rejected_without_staging(service, template):
 
 def test_migration_keeps_fixed_versions_and_templates_separate(service):
     store = service.store
+    from test.catalog_service.legacy_fixture import populate_legacy
+    populate_legacy(store)
     store.upload_skill("versioned", "SKILL.md", SKILL)
     store.publish_resource(
         "versioned", copy.deepcopy(store.read()[1]["resources"]["versioned"]["draft"])
     )
     cfg = copy.deepcopy(store.read()[1]["agents"]["agent-code"]["draft"])
     cfg["bindings"] = [{"id": "versioned", "version": 1}]
+    cfg.update(cpu_limit=2, memory_mb=8192)
     store.save_agent("source", cfg)
     store.upload_skill("versioned", "SKILL.md", SKILL + b"\nVersion two")
     store.publish_resource(
@@ -37,7 +40,7 @@ def test_migration_keeps_fixed_versions_and_templates_separate(service):
     result = service.commit(preview["preview_id"], choices(preview, "-copy"))
     assert store.read()[1]["agents"] == before
     template = next(
-        t for t in AgentTemplates(store).list() if t["source_id"] == "source-draft"
+        t for t in AgentTemplates(store).list() if t.get("source_id") == "source-draft"
     )
     binding = template["config"]["bindings"][0]
     with pytest.raises(HTTPException):
@@ -47,6 +50,8 @@ def test_migration_keeps_fixed_versions_and_templates_separate(service):
     store.publish_resource(resource["id"], copy.deepcopy(resource["draft"]))
     AgentTemplates(store).restore(template["id"], "restored")
     restored = store.read()[1]["agents"]["restored"]
+    assert restored["draft"]["cpu_limit"] == 2
+    assert restored["draft"]["memory_mb"] == 8192
     assert (
         restored["active"] is None and restored["draft"]["bindings"][0]["version"] == 1
     )
@@ -54,6 +59,7 @@ def test_migration_keeps_fixed_versions_and_templates_separate(service):
 
 
 def test_resource_file_checksum_blocks_tampered_import(service):
+    service.store.upload_skill('sample', 'SKILL.md', SKILL)
     payload = json.loads(service.export())
     entry = next(i for i in payload["items"] if i.get("file_sha256"))
     key = next(iter(entry["file_sha256"]))
@@ -65,6 +71,8 @@ def test_resource_file_checksum_blocks_tampered_import(service):
 
 
 def test_legacy_models_export_as_managed_models_with_both_routes(service):
+    from test.catalog_service.legacy_fixture import populate_legacy
+    populate_legacy(service.store)
     from types import SimpleNamespace
     from catalog_service.src.compiler import Compiler as ManagementRuntime
 

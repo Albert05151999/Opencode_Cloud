@@ -1,9 +1,11 @@
+import { waitForPublish } from "./publishing";
 import { Observability } from "./Observability";
 import { LoadTests } from "./LoadTests";
 import { JobHistory } from "./JobHistory";
 import { Capability } from "./Capability";
 import { DeleteAgent } from "./DeleteAgent";
 import { ProviderFields } from "./ProviderFields";
+import { ModelDeployments, PasteModel } from './ModelDeployments';
 import { ResourceTransfer } from "./ResourceTransfer";
 import { Operations } from "./Operations";
 import { ConfigurationView, FormConfigPreview } from "./ConfigPreview";
@@ -56,6 +58,8 @@ const emptyAgent = (id = "") => ({
   allowed_model_ids: [],
   default_model_id: "",
   small_model_id: null,
+  cpu_limit: null,
+  memory_mb: null,
   bindings: [],
 });
 export function Admin({
@@ -66,7 +70,10 @@ export function Admin({
   onConnection: (v: Dict) => void;
 }) {
   const [showArchived, setShowArchived] = useState(false);
-  const [tab, setTab] = useState(() => new URLSearchParams(location.search).get("tab") === "logs" ? "logs" : "models"),
+  const [tab, setTab] = useState(() => {
+    const requested = new URLSearchParams(location.search).get("tab");
+    return requested === "logs" || requested === "agents" ? requested : "models";
+  }),
     [catalog, setCatalog] = useState<Dict>({
       models: {},
       agents: {},
@@ -76,6 +83,7 @@ export function Admin({
     [error, setError] = useState(""),
     [success, setSuccess] = useState(""),
     [loading, setLoading] = useState(false),
+    [publishing, setPublishing] = useState(false),
     [editor, setEditor] = useState<Dict | null>(null),
     [preview, setPreview] = useState<Dict | null>(null),
     [importing, setImporting] = useState(false);
@@ -109,13 +117,18 @@ export function Admin({
     setSuccess("");
     try {
       const result = await fn();
-      setSuccess(result?.job_id ? "已提交发布，请查看发布记录" : message);
+      if (result?.job_id) {
+        setPublishing(true);
+        await waitForPublish(result.job_id);
+        setSuccess("发布成功，配置已生效");
+      } else setSuccess(message);
       await reload();
       return result;
     } catch (e: any) {
       setError(e.message);
       throw e;
     } finally {
+      setPublishing(false);
       setLoading(false);
     }
   }
@@ -184,6 +197,7 @@ export function Admin({
     await action(async () => {
       if (editor.type === "model") {
         const { id, references, ...rest } = value;
+        if (!editor.existing && catalog.models[id]) throw Error("模型 ID 已存在，请改用其他 ID，或关闭表单后编辑已有模型。");
         return remote(`/cloud/admin/models/${encodeURIComponent(id)}`, "PUT", {
           model: { id, ...rest },
           revision: catalog.revision,
@@ -191,6 +205,7 @@ export function Admin({
       }
       if (editor.type === "agent") {
         const { id, ...config } = value;
+        if (!editor.existing && catalog.agents[id]) throw Error("Agent ID 已存在，请改用其他 ID，或编辑已有 Agent。");
         return remote(`/cloud/admin/agents/${encodeURIComponent(id)}`, "PUT", {
           config,
           revision: catalog.revision,
@@ -276,10 +291,15 @@ export function Admin({
           </button>
         ))}
       </div>
+      {publishing && <div className="notice" role="status">已提交，正在等待发布结果。可在发布记录查看进度；配置尚未确认生效。</div>}
       {error && (
         <div className="notice error">
           {error}
-          <button onClick={() => setTab("connection")}>检查连接</button>
+          {/Publish selected models|请先发布模型/.test(error)
+            ? <button onClick={() => {setError(""); setTab("models");}}>配置并发布模型网关</button>
+            : /凭据|credential|连接|connection|401|403/i.test(error)
+              ? <button onClick={() => setTab("connection")}>检查连接</button>
+              : <button onClick={() => setTab("jobs")}>查看发布记录</button>}
         </div>
       )}
       {success && (
@@ -370,6 +390,15 @@ export function Admin({
               )}
               {tab === "models" && (
                 <>
+                  {(["minimax", "glm"] as const).map(id => <button key={id} className="secondary" onClick={() => setEditor({type: "model", value: {
+                    id, name: id === "minimax" ? "MiniMax" : "GLM", provider: "openai-compatible",
+                    upstream_model: id === "minimax" ? "MiniMax-M3" : "glm-5.3",
+                    base_url: id === "minimax" ? "https://api.minimaxi.com/v1" : "https://api.z.ai/api/coding/paas/v4",
+                    api_key: "", enabled: true, parameters: {}, headers: {},
+                  }})}>使用 {id === "minimax" ? "MiniMax" : "GLM"} 示例</button>)}
+                  {Object.values(catalog.models).some((m: any) => m.legacy) && (
+                    <div className="notice warning">默认模型尚未配置。请在服务器执行模型导入，或编辑模型填写上游账户；保存后发布模型网关，再启用并发布 Agent。</div>
+                  )}
                   <button
                     className="secondary"
                     onClick={() => setImporting(true)}
@@ -574,6 +603,11 @@ export function Admin({
                           ? `私有 · ${entry.owner}`
                           : "全局资源库"}
                     </p>
+                    {tab === 'models' && !entry.legacy && <p className="muted model-mapping-summary">
+                      <code>cloud-model-gateway/{entry.id}</code> → {entry.upstream_model} · {entry.deployments?.length
+                        ? entry.deployments.filter((d: Dict) => d.enabled !== false).length
+                        : 1 + (entry.additional_base_urls?.length || 0)} 个启用部署
+                    </p>}
                   </div>
                   <span className="badge">
                     {tab === "models"
@@ -946,13 +980,13 @@ function Editor({
     );
   return (
     <div className="modal-backdrop">
-      <form className="modal editor" onSubmit={submit}>
+      <form className="modal editor" role="dialog" aria-modal="true" aria-labelledby="configuration-editor-title" onSubmit={submit}>
         <div className="section-heading">
           <div>
             <p className="eyebrow">
               {editor.existing ? "EDIT CONFIGURATION" : "NEW CONFIGURATION"}
             </p>
-            <h2>
+            <h2 id="configuration-editor-title">
               {editor.type === "agent"
                 ? "Agent 配置"
                 : editor.type === "model"
@@ -995,6 +1029,10 @@ function Editor({
         </div>
         {editor.type === "model" && (
           <>
+            <PasteModel onApply={(model) => {
+              setV({ ...model, id: editor.existing ? v.id : model.id, legacy: false });
+              setParameters(JSON.stringify(model.parameters || {}, null, 2));
+            }} />
             <div className="form-grid">
               <Field label="提供商协议">
                 <select
@@ -1028,6 +1066,7 @@ function Editor({
                 onChange={(e) => update("base_url", e.target.value)}
               />
             </Field>
+            {!v.deployments?.length && <>
             <Field label="其他等价端点（每行一个，共用 API key）">
               <textarea
                 value={(v.additional_base_urls || []).join("\n")}
@@ -1053,6 +1092,8 @@ function Editor({
                 onChange={(e) => update("api_key", e.target.value)}
               />
             </Field>
+            </>}
+            <ModelDeployments value={v} parameters={parameters} onChange={setV} />
             <KeyValues
               label="请求 headers"
               value={v.headers}
@@ -1124,6 +1165,22 @@ function Editor({
               />
               启用 Agent（发布后生效）
             </label>
+            <h3>沙箱资源</h3>
+            <div className="form-grid">
+              <Field label="CPU（核）">
+                <select value={v.cpu_limit ?? ""} onChange={(e) => update("cpu_limit", e.target.value ? Number(e.target.value) : null)}>
+                  <option value="">沿用服务器默认值</option>
+                  {[1, 2, 4, 8].map((n) => <option key={n} value={n}>{n} 核</option>)}
+                </select>
+              </Field>
+              <Field label="内存（GiB）">
+                <select value={v.memory_mb ?? ""} onChange={(e) => update("memory_mb", e.target.value ? Number(e.target.value) : null)}>
+                  <option value="">沿用服务器默认值</option>
+                  {[1, 2, 4, 8].map((n) => <option key={n} value={n * 1024}>{n} GiB</option>)}
+                </select>
+              </Field>
+            </div>
+            <p className="muted">限制适用于该 Agent 的每个沙箱。保存草稿后需发布生效，发布会重建现有沙箱。工作目录映射到服务器，不设置容器磁盘容量限制。</p>
             <Field label="Agent 指令 · AGENTS.md">
               <textarea
                 className="code-editor"
@@ -1532,6 +1589,7 @@ function Connection({
   const [url, setUrl] = useState(boot.url),
     [token, setToken] = useState(""),
     [remember, setRemember] = useState(false);
+  const [testResult, setTestResult] = useState<Dict | null>(null);
   return (
     <div className="panel connection-form">
       <h2>服务器连接</h2>
@@ -1539,7 +1597,7 @@ function Connection({
         配置保存在本机。管理员凭据只由本地服务用于请求服务器。
       </p>
       <Field label="API 地址">
-        <input value={url} onChange={(e) => setUrl(e.target.value)} />
+        <input value={url} onChange={(e) => { setUrl(e.target.value); setTestResult(null); }} />
       </Field>
       <Field label="管理员凭据">
         <input
@@ -1551,7 +1609,7 @@ function Connection({
               : "输入部署时生成的管理员凭据"
           }
           value={token}
-          onChange={(e) => setToken(e.target.value)}
+          onChange={(e) => { setToken(e.target.value); setTestResult(null); }}
         />
       </Field>
       <label className="checkbox">
@@ -1590,14 +1648,34 @@ function Connection({
           className="secondary"
           onClick={() =>
             run(
-              () => request("/local/connection/test", "POST", {}),
-              "就绪检查和管理能力检查通过",
+              async () => {
+                setTestResult(null);
+                await request("/local/connection", "PUT", {
+                  url: url.trim(), token: token.trim() || undefined, remember,
+                });
+                onSaved(await bootstrap());
+                setToken("");
+                const result = await request("/local/connection/test", "POST", {});
+                setTestResult(result);
+                return result;
+              },
+              "管理员凭据验证通过",
             )
           }
         >
-          测试已保存的连接
+          保存并测试连接
         </button>
       </div>
+      {testResult && (
+        <div className={"notice setup-notice " + (testResult.ready?.ok ? "success" : "warning")} role="status">
+          {testResult.ready?.ok ? "凭据有效，服务器已就绪。" : <>
+            <p>凭据有效，管理功能可用；部分服务尚未就绪：</p>
+            <p>{Object.entries(testResult.ready?.modules || {}).filter(([, ready]) => !ready).map(([name]) => name).join("、") || "请检查服务器服务状态"}</p>
+            <p>若 model_gateway 未就绪，请先导入并发布模型网关，再启用并发布 Agent。无需更换管理员凭据。</p>
+            <a href="/admin">配置模型</a> · <a href="/admin?tab=agents">配置 Agent</a>
+          </>}
+        </div>
+      )}
     </div>
   );
 }

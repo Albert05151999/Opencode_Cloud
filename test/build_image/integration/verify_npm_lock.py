@@ -27,7 +27,7 @@ def main():
               "locked_packages": len(lock["packages"]) - 1,
               "integrity": "sha512 for every npm package",
               "finding": "Only the pinned OpenCode postinstall runs, during build/verification."}
-    output = ROOT / "artifacts/release/npm-lock-verification.json"
+    output = ROOT / "artifacts/verification/npm-lock-verification.json"
     output.parent.mkdir(parents=True, exist_ok=True)
     output.write_text(json.dumps(report, indent=2) + "\n")
     print(json.dumps(report))

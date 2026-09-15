@@ -145,11 +145,14 @@ export function Chat({ onConnect }: { onConnect: () => void }) {
   };
   useEffect(() => {
     remote("/cloud/agents")
-      .then(setAgents)
+      .then((items: Dict[]) => {
+        setAgents(items);
+        if (!items.some(a => a.id === agent)) setAgent(items.find(a => a.enabled)?.id || items[0]?.id || "");
+      })
       .catch((e) => setError(e.message));
   }, []);
   useEffect(() => {
-    if (!active) return;
+    if (!active?.enabled) return;
     localStorage.setItem("agent", agent);
     localStorage.setItem("username", user);
     select(localStorage.getItem("session:" + owner) || "");
@@ -539,6 +542,13 @@ export function Chat({ onConnect }: { onConnect: () => void }) {
             <button className="icon" onClick={() => setError("")}>
               <X size={14} />
             </button>
+          </div>
+        )}
+        {!active && <div className="notice warning setup-notice"><p>尚无可调用的 Agent。请先配置模型，再创建并发布 Agent。</p><a href="/admin">配置模型</a><a href="/admin?tab=agents">创建 Agent</a></div>}
+        {active && !active.enabled && (
+          <div className="notice warning" role="status">
+            当前 Agent 尚未启用，暂时不能开始会话。请先配置并发布模型网关，再启用并发布 Agent。
+            <a href="/admin">配置模型</a> · <a href="/admin?tab=agents">启用 Agent</a>
           </div>
         )}
         <div className="message-scroll">
