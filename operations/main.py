@@ -132,11 +132,13 @@ class Workflows:
             observed = await self.call(
                 "sandbox_manager", "/internal/v1/sandboxes/" + job["target"]
             )
-            desired = "stopped" if job["kind"] == "sandbox.stop" else "ready"
+            desired = "destroyed" if job["kind"] == "sandbox.destroy" else "stopped" if job["kind"] == "sandbox.stop" else "ready"
             if observed.get("status") != desired:
                 raise HTTPException(
                     409, "Observed sandbox does not match requested state"
                 )
+            if desired == "destroyed" and observed.get("container_id"):
+                raise HTTPException(409, "Container removal has not been confirmed")
             if job["kind"] in {"sandbox.restart", "sandbox.recover"} and observed.get(
                 "container_id"
             ) == job.get("before", {}).get("container_id"):
@@ -145,7 +147,7 @@ class Workflows:
                 )
             self.store.state(
                 "desired:" + job["target"],
-                {"state": "stopped" if desired == "stopped" else "running"},
+                {"state": "on_demand" if desired == "destroyed" else "stopped" if desired == "stopped" else "running"},
             )
             result = {"sandbox_id": job["target"], "observed": desired}
         elif job["kind"] == "agent.delete":
@@ -394,11 +396,11 @@ class Workflows:
                     },
                 )
                 applied = True
-            if job["kind"] in {"sandbox.stop", "sandbox.start", "sandbox.restart"}:
+            if job["kind"] in {"sandbox.stop", "sandbox.start", "sandbox.restart", "sandbox.destroy"}:
                 self.store.state(
                     "desired:" + job["target"],
                     {
-                        "state": "stopped"
+                        "state": "on_demand" if job["kind"] == "sandbox.destroy" else "stopped"
                         if job["kind"] == "sandbox.stop"
                         else "running"
                     },
@@ -788,6 +790,13 @@ def create_app(data_root=None):
             "items": [public_job(j) for j in values[offset : offset + limit]],
         }
 
+    @app.get("/cloud/admin/jobs/export")
+    def export_jobs():
+        from starlette.responses import Response
+        records = sorted((public_job(j) for j in store.jobs()), key=lambda j: j["created"], reverse=True)
+        return Response(json.dumps(records, ensure_ascii=False), media_type="application/json",
+                        headers={"Content-Disposition": 'attachment; filename="operation-history.json"'})
+
     @app.get("/cloud/admin/jobs/{jid}")
     def job(jid: str):
         return public_job(store.get(jid))
@@ -918,7 +927,7 @@ def create_app(data_root=None):
 
     @app.post("/cloud/admin/sandboxes/{sid}/{action}")
     async def sandbox_action(sid: str, action: str, payload: dict):
-        if action not in {"start", "stop", "restart"}:
+        if action not in {"start", "stop", "restart", "destroy"}:
             raise HTTPException(404, "Unknown operation")
         return await submit(
             "sandbox." + action,

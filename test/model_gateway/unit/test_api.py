@@ -60,3 +60,30 @@ def test_authenticated_activation_streaming_and_draft_isolation(tmp_path, monkey
     )
     assert client.get("/internal/v1/config/status").json()["release_id"] == "r1"
     assert client.get("/v1/models").json()["data"][0]["id"] == "test"
+
+
+def test_model_timing_separates_local_preparation_sdk_wait_and_stream(tmp_path,monkeypatch):
+    import asyncio
+    import model_gateway.main as service
+    rows=[]
+    monkeypatch.setattr(service,'emit',lambda action,**fields:rows.append({'action':action,**fields}))
+    class DelayedRouter(Router):
+        async def acompletion(self,**payload):
+            await asyncio.sleep(.02)
+            async def chunks():
+                await asyncio.sleep(.03)
+                yield {'choices':[{'delta':{'content':'hello'}}]}
+                await asyncio.sleep(.04)
+            return chunks()
+    app=service.create_app({'data_root':str(tmp_path/'data'),'log_root':str(tmp_path/'logs'),'service_token':'test'},DelayedRouter)
+    client=TestClient(app,headers={'Authorization':'Bearer test'})
+    app.state.gateway.activate({'release_id':'timing','version':1,'configuration':{'model_list':[{'model_name':'test','litellm_params':{'model':'openai/test'}}]}})
+    response=client.post('/v1/chat/completions',json={'model':'test','stream':True})
+    assert response.status_code==200 and '[DONE]' in response.text
+    stages={row['stage']:row for row in rows}
+    assert set(stages)=={'gateway_prepare','model_sdk_wait','model_first_chunk_wait','model_stream_transfer'}
+    assert stages['model_sdk_wait']['duration_ms']>=15
+    assert stages['model_first_chunk_wait']['duration_ms']>=25
+    assert stages['model_stream_transfer']['duration_ms']>=35
+    assert len({row['parent_span_id'] for row in rows})==1
+    assert len({row['span_id'] for row in rows})==4

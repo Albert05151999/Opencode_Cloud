@@ -646,6 +646,32 @@ class ManagementStore:
                     "versions": [],
                 }
 
+    def resource_lifecycle(self, rid, action, expected=None):
+        with self.edit(expected) as data:
+            resource = data["resources"].get(rid)
+            if not resource:
+                fail("Resource not found", 404)
+            if action in {"archive", "restore"}:
+                resource["archived"] = action == "archive"
+                return
+            if action != "delete":
+                fail("Unknown resource action")
+            if not resource.get("archived"):
+                fail("请先归档资源，再永久删除", 409)
+            references = []
+            for aid, agent in data["agents"].items():
+                configs = [agent["draft"]] + [v["config"] for v in agent["versions"]]
+                if any(b["id"] == rid for cfg in configs for b in cfg.get("bindings", [])):
+                    references.append("Agent " + aid)
+            for tid, template in data.get("agent_templates", {}).items():
+                if any(b["id"] == rid for b in template["config"].get("bindings", [])):
+                    references.append("模板 " + tid)
+            if references:
+                fail("资源仍被草稿、已发布版本或历史版本引用，不能删除：" + ", ".join(references), 409)
+            # Blobs can be shared by immutable resources/exports; delete only the
+            # catalog entry, never remove shared content while dropping metadata.
+            del data["resources"][rid]
+
     def upload_skill(self, rid, filename, content, owner=None, expected=None):
         identifier(rid)
         meta, files = unpack_skill(filename, content)

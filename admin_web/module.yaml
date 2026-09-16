@@ -1,5 +1,5 @@
 module_id: admin_web
-version: 0.3.2
+version: 0.3.7
 entrypoint: python -m admin_web.local_service
 port: 18765
 healthcheck: /local/bootstrap

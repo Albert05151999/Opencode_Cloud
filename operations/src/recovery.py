@@ -90,6 +90,8 @@ class Recovery:
                 continue
             if self.store.state("desired:" + sid) == {"state": "stopped"}:
                 continue
+            if self.store.state("desired:" + sid) == {"state": "on_demand"} and not record.get("container_id"):
+                continue
             if any(
                 j.get("scope", j["target"]) in {aid, "*"}
                 and j["status"]

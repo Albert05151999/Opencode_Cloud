@@ -857,9 +857,12 @@ test("logs filter by module and job and open correlated trace", async ({ page })
   await page.getByLabel("日志模块").selectOption("operations");
   await page.getByLabel("任务 ID", {exact: true}).fill("job_demo");
   await page.getByRole("button", {name: "查询", exact: true}).click();
-  await page.getByRole("button", {name: "trace 1234567890ab"}).click();
+  await expect(page.getByLabel("原始日志预览")).toContainText("1234567890ab");
   expect(query?.searchParams.get("module")).toBe("operations");
   expect(query?.searchParams.get("job_id")).toBe("job_demo");
+  await page.getByRole("tab", {name:"请求调用链",exact:true}).click();
+  await page.getByLabel("追踪 ID").fill("1234567890abcdef1234567890abcdef");
+  await page.getByRole("button", {name:"查询",exact:true}).click();
   await expect(page.getByRole("region", {name: "调用链详情"})).toContainText("瞬时事件 / 未记录耗时");
   await page.getByRole("region", {name: "调用链详情"}).getByRole("button").click();
   await expect(page.getByText("0 条事件 · span span_demo", {exact:true})).toBeVisible();

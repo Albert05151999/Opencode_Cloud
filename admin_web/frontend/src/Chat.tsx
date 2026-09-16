@@ -7,7 +7,6 @@ import {
   Square,
   Paperclip,
   FolderOpen,
-  ChevronDown,
   Copy,
   Sparkles,
   RefreshCw,

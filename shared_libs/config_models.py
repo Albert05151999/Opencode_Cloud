@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import configparser
-from dataclasses import asdict, dataclass
+from dataclasses import dataclass
 import os
 from pathlib import Path, PurePosixPath
 from typing import Mapping
@@ -127,9 +127,6 @@ class AppConfig:
     metrics: MetricsConfig
     performance: PerformanceConfig
     load_capacity: LoadCapacityConfig = LoadCapacityConfig()
-
-    def safe_dict(self) -> dict[str, object]:
-        return asdict(self)
 
 
 def parse_csv(value: str) -> tuple[str, ...]:

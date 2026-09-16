@@ -19,6 +19,7 @@ from catalog_service.src.admin_dto import (
     CopyRequest,
     ResourceWrite,
     ProbeRequest,
+    Revision,
 )
 
 
@@ -28,7 +29,10 @@ def create_admin_router(store, runtime):
     @router.get("/cloud/capabilities")
     def capabilities():
         return {
-            "version": "0.3.1",
+            "version": "0.3.7",
+            "sandbox_destroy": True,
+            "resource_lifecycle": True,
+            "log_download": True,
             "sandbox_operations": True,
             "agent_archive": True,
             "configuration_preview": True,
@@ -293,6 +297,21 @@ def create_admin_router(store, runtime):
         store.save_resource(resource_id, payload["resource"], payload.get("revision"))
         return {"ok": True}
 
+    @router.post("/cloud/admin/resources/{resource_id}/archive")
+    def archive_resource(resource_id: str, payload: Revision = Revision()):
+        store.resource_lifecycle(resource_id, "archive", payload.revision)
+        return {"ok": True}
+
+    @router.post("/cloud/admin/resources/{resource_id}/restore")
+    def restore_resource(resource_id: str, payload: Revision = Revision()):
+        store.resource_lifecycle(resource_id, "restore", payload.revision)
+        return {"ok": True}
+
+    @router.delete("/cloud/admin/resources/{resource_id}")
+    def delete_resource(resource_id: str, revision: int | None = None):
+        store.resource_lifecycle(resource_id, "delete", revision)
+        return {"ok": True}
+
     @router.post("/cloud/admin/resources/{resource_id}/copy")
     def copy_resource(resource_id: str, payload: CopyRequest):
         payload = payload.model_dump(exclude_unset=True)
@@ -390,7 +409,7 @@ def create_admin_router(store, runtime):
             await runtime.probe(path)
         # Persist checked artifact only if the source draft has not changed.
         with store.edit() as latest:
-            if latest["resources"][resource_id]["draft"] != original:
+            if resource_id not in latest["resources"] or latest["resources"][resource_id]["archived"] or latest["resources"][resource_id]["draft"] != original:
                 fail("Draft changed during validation", 409)
             rr = latest["resources"][resource_id]
             number = len(rr["versions"]) + 1

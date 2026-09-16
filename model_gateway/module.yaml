@@ -1,6 +1,6 @@
 {
   "module_id": "model_gateway",
-  "version": "1.0.0",
+  "version": "1.0.2",
   "entrypoint": "model_gateway.main",
   "build": {
     "sources": [

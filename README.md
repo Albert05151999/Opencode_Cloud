@@ -8,14 +8,17 @@ OpenCode 的多服务平台与独立本地管理 Web。服务器提供模型、A
 2. 可选 `PRESET_AGENTS=code:glm,data:minimax`，安装时创建并发布两个 Agent。留空不创建预设 Agent。
 3. 在 Linux 或 WSL 仓库根目录构建服务器：
    `python3 build_image/build.py bundle`。
-4. 上传 `artifacts/releases/release-0.3.2.tar.gz`，服务器解压后执行 `sh install.sh`。
+4. 上传 `artifacts/releases/release-0.3.7.tar.gz`，服务器解压后执行 `sh install.sh`。
 5. Windows PowerShell 在源码根目录执行：
-   `python admin_web/build.py --version 0.3.2`，
+   `python admin_web/build.py --version 0.3.7`，
    再执行 `powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\admin_web\scripts\start.ps1`。
 
 本地打开 `http://127.0.0.1:18765`，连接 `http://服务器IP:18080`，凭据使用服务器发布目录 `.env` 的 `ADMIN_TOKEN`。
 
 - [完整部署与故障处理](docs/deployment.md)
+- [各模块职责与调用关系](docs/modules.md)
+- [0.3.7 部署验收记录](docs/release-0.3.7.md)
+- [对外 API 使用手册](docs/api.md) · [完整接口与字段参考](docs/api-reference.md)
 - [模型、账户池和 Agent 配置](docs/model-configuration.md)
 - [导入导出与配置包恢复](docs/import-export.md)
 

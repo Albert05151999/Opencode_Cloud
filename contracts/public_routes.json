@@ -320,6 +320,41 @@
       "method": "GET",
       "path": "/cloud/files/list",
       "module": "file_service"
+    },
+    {
+      "method": "GET",
+      "path": "/cloud/logs/export",
+      "module": "observability"
+    },
+    {
+      "method": "GET",
+      "path": "/cloud/admin/jobs/export",
+      "module": "operations"
+    },
+    {
+      "method": "POST",
+      "path": "/cloud/admin/sandboxes/{sid}/destroy",
+      "module": "operations"
+    },
+    {
+      "method": "POST",
+      "path": "/cloud/admin/resources/{resource_id}/archive",
+      "module": "catalog_service"
+    },
+    {
+      "method": "POST",
+      "path": "/cloud/admin/resources/{resource_id}/restore",
+      "module": "catalog_service"
+    },
+    {
+      "method": "DELETE",
+      "path": "/cloud/admin/resources/{resource_id}",
+      "module": "catalog_service"
+    },
+    {
+      "method": "GET",
+      "path": "/cloud/traces/sessions/{session_id}",
+      "module": "observability"
     }
   ]
 }

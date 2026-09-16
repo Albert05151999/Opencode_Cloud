@@ -4,10 +4,12 @@ import asyncio
 import os
 import json
 import logging
+import time
+import uuid
 from fastapi import FastAPI, HTTPException, Request
 from fastapi.responses import JSONResponse, StreamingResponse
 from shared_libs.service import configure_service, run
-from shared_libs.logging import TRACE_CONTEXT, bind_request
+from shared_libs.logging import TRACE_CONTEXT, bind_request, emit
 from model_gateway.src.state import GatewayState, make_router
 from model_gateway.src.models import compile_model
 from model_gateway.src.auth import RuntimeCredentialMiddleware
@@ -96,6 +98,7 @@ def create_app(config=None, router_factory=make_router):
 
     @app.post("/v1/{operation:path}")
     async def inference(operation: str, request: Request):
+        prepared_at = time.perf_counter()
         if operation not in methods:
             raise HTTPException(404, "Unsupported model endpoint")
         router = (
@@ -133,21 +136,39 @@ def create_app(config=None, router_factory=make_router):
                 bind_request(request.scope, **{field: value})
         if headers:
             payload["extra_headers"] = headers
+        def phase(stage, started, error=None):
+            emit("stage_complete", stage=stage, span_id=uuid.uuid4().hex[:16],
+                 parent_span_id=context.get("span_id"), logical_model=payload["model"],
+                 duration_ms=round((time.perf_counter()-started)*1000,3),
+                 error_code=error, status_code=200 if not error else None)
+        phase("gateway_prepare", prepared_at)
+        response_started = time.perf_counter()
         try:
             result = await getattr(router, methods[operation])(**payload)
+            phase("model_sdk_wait" if payload.get("stream") else "model_response_wait", response_started)
             if payload.get("stream"):
 
                 async def events():
+                    stream_started = time.perf_counter()
+                    first = None
+                    completed = False
                     try:
                         async for chunk in result:
+                            if first is None:
+                                phase("model_first_chunk_wait", stream_started)
+                                first = time.perf_counter()
                             value = (
                                 chunk.model_dump_json(exclude_none=True)
                                 if hasattr(chunk, "model_dump_json")
                                 else json.dumps(chunk)
                             )
                             yield "data: " + value + "\n\n"
+                        completed = True
                         yield "data: [DONE]\n\n"
                     finally:
+                        phase("model_stream_transfer" if first is not None else "model_first_chunk_wait",
+                              first if first is not None else stream_started,
+                              None if completed else "ModelStreamInterrupted")
                         close = getattr(result, "aclose", None)
                         if close:
                             await close()
@@ -163,6 +184,7 @@ def create_app(config=None, router_factory=make_router):
                 else result
             )
         except Exception as exc:
+            phase("model_response_wait", response_started, type(exc).__name__)
             logging.getLogger("model_gateway").warning(
                 "Model request failed: %s", type(exc).__name__
             )

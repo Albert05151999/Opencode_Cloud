@@ -16,7 +16,7 @@
   },
   "settings": {
     "model_gateway_public_url": "http://host.docker.internal:8104/v1",
-    "agent_runtime_image": "opencode-cloud/agent_runtime:1.0.0",
+    "agent_runtime_image": "opencode-cloud/agent_runtime:1.0.2",
     "seed_root": "",
     "logging": {
       "max_bytes": 10485760,

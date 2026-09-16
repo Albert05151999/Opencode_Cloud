@@ -1,6 +1,6 @@
 {
   "module_id": "operations",
-  "version": "1.0.0",
+  "version": "1.0.2",
   "entrypoint": "operations.main",
   "port": 8080,
   "health": {

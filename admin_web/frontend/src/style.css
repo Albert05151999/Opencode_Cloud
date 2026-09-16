@@ -1295,3 +1295,19 @@ small {
 .notice.setup-notice a {
   display: inline-block;
 }
+.modal{font-size:14px;line-height:1.6}
+.modal .form-grid{grid-template-columns:repeat(2,minmax(0,1fr));gap:20px}
+.modal .form-grid>*{min-width:0}
+.modal label:not(.checkbox){display:flex;flex-direction:column;gap:8px;font-size:13px;font-weight:500;line-height:1.5}
+.modal input:not([type="checkbox"]),.modal select,.modal textarea{width:100%;min-width:0;box-sizing:border-box;font-size:14px;line-height:1.5}
+.modal input:not([type="checkbox"]),.modal select{min-height:42px}
+.modal h3{font-size:16px;line-height:1.5;margin:22px 0 12px}
+.modal .muted{font-size:13px;line-height:1.7;overflow-wrap:anywhere}
+.modal .panel{padding:18px;margin-block:18px}
+.modal .actions{flex-wrap:wrap;gap:10px}
+.modal .checkbox{display:flex;flex-direction:row;align-items:center;gap:8px;font-size:13px}
+.modal .checkbox input{width:16px;height:16px;flex:0 0 16px}
+.modal .deployment-card{margin-block:16px;padding:18px}
+.modal legend{font-size:13px;font-weight:600;padding-inline:6px}
+.modal .model-paste>button{margin-top:12px}
+@media(max-width:650px){.modal .form-grid{grid-template-columns:minmax(0,1fr)}.modal{padding:20px}.modal .modal-footer{bottom:-20px}}

@@ -34,7 +34,7 @@
       },
       "sandbox": {
         "runtime": "runc",
-        "image": "opencode-cloud/agent_runtime:1.0.0",
+        "image": "opencode-cloud/agent_runtime:1.0.2",
         "opencode_internal_port": 4096,
         "idle_timeout_seconds": 1800,
         "start_timeout_seconds": 15,

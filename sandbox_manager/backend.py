@@ -103,6 +103,9 @@ class LocalDockerBackend:
             WeakValueDictionary()
         )
         self.in_use: dict[str, int] = {}
+        # Event subscriptions keep idle eviction from churning open pages, but
+        # are observers, not executions that must block lifecycle operations.
+        self.event_subscribers: dict[str, int] = {}
 
     async def reconcile(self) -> dict[str, int]:
         """Validate this instance's Docker snapshot before accepting requests."""

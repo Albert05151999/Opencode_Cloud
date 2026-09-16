@@ -338,3 +338,20 @@ def test_partial_deletion_retry_requires_fresh_preview_and_new_execution_identit
         await asyncio.gather(*(c.aclose() for c in runtime.clients.values()))
 
     asyncio.run(scenario())
+def test_job_export_is_complete_and_redacts_private_request_payloads(tmp_path,monkeypatch):
+    monkeypatch.setenv('SERVICE_TOKEN','token')
+    async def scenario():
+        app=create_app(tmp_path)
+        store=app.state.runtime.store
+        for i in range(60):
+            job,_=store.submit('sandbox.stop',f'sid-{i}',{'request_id':f'request-{i}','private':'never-export'})
+            store.update(job['id'],status='succeeded')
+        async with httpx.AsyncClient(transport=httpx.ASGITransport(app=app),base_url='http://test',headers={'Authorization':'Bearer token'}) as client:
+            listing=await client.get('/cloud/admin/jobs?limit=50')
+            assert len(listing.json()['items'])==50
+            result=await client.get('/cloud/admin/jobs/export')
+            assert result.status_code==200 and len(result.json())==60
+            assert 'attachment' in result.headers['content-disposition']
+            assert 'never-export' not in result.text
+        await asyncio.gather(*(c.aclose() for c in app.state.runtime.clients.values()))
+    asyncio.run(scenario())

@@ -6,6 +6,7 @@ const labels: Record<string, string> = {
   'models.apply': '发布模型网关', 'agent.apply': '发布 Agent', 'agent.delete': '删除 Agent',
   'agent.archive': '归档 Agent', 'agent.delete-empty': '删除未发布 Agent',
   'sandbox.start': '启动沙箱', 'sandbox.stop': '停止沙箱', 'sandbox.restart': '重启沙箱',
+  'sandbox.destroy': '销毁沙箱容器', destroyed: '已销毁 · 按需重建', on_demand: '按需创建',
 };
 export const operationLabel = (value: unknown) => labels[String(value)] || String(value || '未知');
 export function localTime(value: unknown) {

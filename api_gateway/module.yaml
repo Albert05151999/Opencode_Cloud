@@ -1,6 +1,6 @@
 {
   "module_id": "api_gateway",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "entrypoint": "api_gateway.main",
   "build": {
     "sources": [

@@ -210,3 +210,31 @@ def test_sync_http_boundary_preserves_background_job_context(tmp_path):
     assert headers["x-cloud-session-id"] == "ses_a"
     assert headers["x-cloud-message-id"] == "msg_a"
     assert headers["authorization"] == "Bearer internal"
+def test_log_export_includes_retained_rows_beyond_preview_and_filters_session(tmp_path):
+    cfg = config(tmp_path)
+    folder = tmp_path / "log" / "operations" / "worker"
+    folder.mkdir(parents=True)
+    rows = [{"module":"operations", "trace_id":"a"*32, "session_id":"ses_one", "n":n} for n in range(1100)]
+    (folder / "events.jsonl").write_text("\n".join(map(json.dumps, rows)) + '\n')
+    (folder / "events.jsonl.1").write_text(json.dumps({"module":"operations", "session_id":"ses_two"})+'\n')
+    client = TestClient(create_app(cfg), headers={"Authorization":"Bearer internal"})
+    preview = client.get('/cloud/logs?module=operations&session_id=ses_one&limit=100').json()
+    assert len(preview['items']) == 100 and preview['truncated']
+    exported = client.get('/cloud/logs/export?module=operations&session_id=ses_one&trace_id='+'a'*32)
+    assert exported.status_code == 200
+    assert 'attachment' in exported.headers['content-disposition']
+    assert [json.loads(line) for line in exported.text.splitlines()] == rows
+    assert client.get('/cloud/logs/export?module=../escape').status_code == 400
+
+
+def test_session_only_traces_are_filtered_before_result_limit(tmp_path):
+    cfg = config(tmp_path)
+    folder = tmp_path / "log" / "api_gateway" / "worker"
+    folder.mkdir(parents=True)
+    rows = [{"timestamp":f"2026-09-16T01:00:0{n}Z", "trace_id":str(n)*32,
+             "span_id":str(n)*16,"module":"api_gateway","action":"http_request",
+             "path":"/session","session_id":"ses_one" if n == 1 else None} for n in range(1,4)]
+    (folder/'events.jsonl').write_text('\n'.join(map(json.dumps,rows)))
+    client=TestClient(create_app(cfg),headers={"Authorization":"Bearer internal"})
+    result=client.get('/cloud/traces?session_only=true&limit=1').json()
+    assert len(result['items']) == 1 and result['items'][0]['trace_id'] == '1'*32

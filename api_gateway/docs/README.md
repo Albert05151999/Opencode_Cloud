@@ -1,5 +1,7 @@
 # api_gateway：公共 API 入口
 
+第三方调用入口：[对外 API 使用手册](../../docs/api.md)。包括认证、URL/Header/Body、curl 与 PowerShell 示例、SSE、管理发布、文件及压测；完整参数见 [接口参考](../../docs/api-reference.md)。
+
 将已有公开路由分发到所属服务，保持原生会话与 SSE 流式传输；管理令牌只在入口校验，内部请求使用服务令牌。无业务数据库。
 
 配置入口：`config/api_gateway/defaults.json`，经 `python -m config.tooling render` 生成配置，运行以 `MODULE_CONFIG` 指定。`python -m api_gateway.main` 启动；`/health/live` 检查进程，`/health/ready` 检查就绪（API 入口为 `/cloud/health/ready`）。

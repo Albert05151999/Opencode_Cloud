@@ -60,7 +60,7 @@ export function Operations() {
   async function operate(row: Dict, action: string) {
     if (
       !confirm(
-        `${action === "stop" ? "停止" : action === "start" ? "启动" : "重启"}沙箱 ${row.sandbox_id}？将等待该 Agent 的活动任务结束，最多 120 秒；不会自动重发聊天请求。`,
+        action === "destroy" ? `销毁沙箱 ${row.sandbox_id} 的容器？会话和映射工作目录保留，下次请求会重新创建。须确认任务空闲；异常沙箱请在详情中查看强制操作影响。` : `${action === "stop" ? "停止" : action === "start" ? "启动" : "重启"}沙箱 ${row.sandbox_id}？将等待该 Agent 的活动任务结束，最多 120 秒；不会自动重发聊天请求。`,
       )
     )
       return;
@@ -124,7 +124,7 @@ export function Operations() {
           }}
         >
           <option value="">全部状态</option>
-          {["ready", "unhealthy", "stopped", "creating", "missing"].map((s) => (
+          {["ready", "unhealthy", "stopped", "creating", "missing", "destroyed"].map((s) => (
             <option key={s} value={s}>{operationLabel(s)}</option>
           ))}
         </select>
@@ -166,10 +166,10 @@ export function Operations() {
             >
               详情
             </button>
-            {["start", "stop", "restart"].map((action) => (
+            {["start", "stop", "restart", "destroy"].map((action) => (
               <button
                 key={action}
-                disabled={busy || (action === "start" ? row.status === "ready" || row.status === "creating" : ["stopped", "missing"].includes(row.status))}
+                disabled={busy || (action === "start" ? row.status === "ready" || row.status === "creating" : action === "destroy" ? row.status === "destroyed" : ["stopped", "missing", "destroyed"].includes(row.status))}
                 className="secondary"
                 onClick={() => operate(row, action)}
               >
@@ -177,7 +177,7 @@ export function Operations() {
                   ? "启动"
                   : action === "stop"
                     ? "停止"
-                    : "重启"}
+                    : action === "destroy" ? "销毁容器" : "重启"}
               </button>
             ))}
           </div>

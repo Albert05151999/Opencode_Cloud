@@ -302,10 +302,14 @@ def create_app(config=None, backend=None):
             "items": items[max(0, offset) : max(0, offset) + min(200, max(1, limit))],
         }
 
+    def active_request_leases(backend, sid):
+        return max(0, backend.in_use.get(sid, 0)
+                   - getattr(backend, "event_subscribers", {}).get(sid, 0))
+
     async def execution(record):
         b = current()
         if (
-            b.in_use.get(record.sandbox_id)
+            active_request_leases(b, record.sandbox_id)
             or admission.requests.get(record.agent_id)
             or admission.acquiring.get(record.agent_id)
         ):
@@ -385,6 +389,8 @@ def create_app(config=None, backend=None):
                 "activity_generation": record.last_active_at,
                 "container_state": container_state,
                 "sessions": len(registry.list_sessions_for_sandbox(record.sandbox_id)),
+                "active_request_leases": active_request_leases(backend, record.sandbox_id),
+                "event_subscriptions": getattr(backend, "event_subscribers", {}).get(record.sandbox_id, 0),
             }
 
     def by_sid(sid):
@@ -403,7 +409,7 @@ def create_app(config=None, backend=None):
         result.update(
             session_count=len(sessions),
             sessions=[
-                {**asdict(x), "execution": {"type": "unknown"}} for x in sessions
+                {**asdict(x), "execution": {"type": "idle" if result["execution"] == "idle" else "unknown"}} for x in sessions
             ],
             cpu_percent=None,
             memory_bytes=None,
@@ -463,7 +469,7 @@ def create_app(config=None, backend=None):
     async def sandbox_action(sid: str, body: dict):
         r, backend = by_sid(sid), current()
         name, key = body.get("action"), body.get("request_id")
-        if name not in {"start", "stop", "restart", "recover"}:
+        if name not in {"start", "stop", "restart", "recover", "destroy"}:
             raise HTTPException(400, "Invalid sandbox action")
         if not isinstance(key, str) or not key or len(key) > 256:
             raise HTTPException(400, "A bounded request_id is required")
@@ -505,7 +511,7 @@ def create_app(config=None, backend=None):
                     or preview["activity_generation"] != r.last_active_at
                 ):
                     raise HTTPException(409, "Force preview expired or changed")
-            elif name != "start" and (backend.in_use.get(sid) or observed != "idle"):
+            elif name != "start" and (active_request_leases(backend, sid) or observed != "idle"):
                 raise HTTPException(409, "Sandbox execution is not confirmed idle")
             # Check resource/admission policy before destroying a container. This
             # deliberately uses the resource check, not check_acquire: the latter
@@ -515,6 +521,13 @@ def create_app(config=None, backend=None):
             container = (
                 await backend._get_container(r.container_id) if r.container_id else None
             )
+            if name == "destroy" and container is None and hasattr(backend, "_find_existing"):
+                sandbox_key = hashlib.sha256(
+                    (r.agent_id + "\x00" + r.username).encode()
+                ).hexdigest()[:20]
+                container = await backend._find_existing(
+                    r, sandbox_key, r.agent_id, r.username
+                )
             if container:
                 backend._verify_ownership(container, r.agent_id, r.username)
             # Reserve the command under a database write lock, including across
@@ -533,7 +546,15 @@ def create_app(config=None, backend=None):
                 db.execute("INSERT INTO commands VALUES(?,?,NULL)", (key, canonical))
             if body.get("force"):
                 previews.pop(body["preview_id"], None)
-            if name == "stop":
+            if name == "destroy":
+                if container:
+                    await backend._remove_owned(container)
+                # Keep session routes and mounted workspace/state; acquire recreates
+                # the runtime on the next request without losing conversation history.
+                registry.upsert_sandbox(sandbox_id=sid, agent_id=r.agent_id,
+                    username=r.username, container_id=None, host_port=None,
+                    status="destroyed", image_version=r.image_version)
+            elif name == "stop":
                 if container:
                     await asyncio.to_thread(container.stop, timeout=10)
                 registry.mark_sandbox_status(sid, "stopped")
@@ -618,7 +639,7 @@ def create_app(config=None, backend=None):
         for record in registry.list_sandboxes():
             if record.agent_id != aid or (username and record.username != username):
                 continue
-            if b.in_use.get(record.sandbox_id):
+            if active_request_leases(b, record.sandbox_id):
                 raise HTTPException(409, "Sandbox has active leases")
             container = (
                 await b._get_container(record.container_id)

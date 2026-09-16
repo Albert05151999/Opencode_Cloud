@@ -71,6 +71,7 @@ export function SandboxDetail({
             · 采样：{data.sampled_at ? new Date(data.sampled_at * 1000).toLocaleTimeString() : "未知"}
           </p>
           <h4>受此沙箱影响的会话</h4>
+          <p>执行请求连接：{data.active_request_leases ?? "未知"} · 事件订阅连接：{data.event_subscriptions ?? "未知"}（订阅不代表任务运行中）</p>
           {(Array.isArray(data.sessions) ? data.sessions : []).map((s: Dict) => (
             <p key={s.session_id}>
               {s.session_id} · {s.execution?.type || "未知"}
@@ -128,6 +129,8 @@ export function SandboxDetail({
           >
             强制重启
           </button>
+          <button disabled={busy || confirmation !== id} onClick={() => force("destroy")}>强制销毁容器</button>
+          <p>销毁仅移除容器，保留会话和映射目录，下次请求按需重建；正在执行的任务会中断。</p>
         </div>
       )}
     </section>

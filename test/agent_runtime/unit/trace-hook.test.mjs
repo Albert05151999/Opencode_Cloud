@@ -55,3 +55,23 @@ test("unknown timing and evicted associations never fabricate spans", async () =
   const invalid=part(1028);invalid.event.properties.part.state.time={};hook.event(invalid);assert.equal(rows.length,count);
  } finally {console.log=original;await hook.dispose();}
 });
+
+test('runtime spans cover the whole turn, skip tool rounds, and parent model calls', async()=>{
+ const hook=await plugin(),rows=[],original=console.log,trace='d'.repeat(32),user='msg_'+trace;
+ console.log=v=>rows.push(JSON.parse(v.split('@@OPENCODE_CLOUD_EVENT@@')[1]));
+ const message=info=>hook.event({event:{type:'message.updated',properties:{info}}});
+ try{
+  message({role:'user',sessionID:'ses_a',id:user,time:{created:1000}});
+  const headers={headers:{}};await hook['chat.headers']({sessionID:'ses_a',message:{id:user,time:{created:1000}}},headers);
+  message({role:'assistant',sessionID:'ses_a',id:'assistant1',parentID:user,time:{completed:2000},finish:'tool-calls'});
+  assert.equal(rows.filter(r=>r.action==='runtime_complete').length,0);
+  message({role:'assistant',sessionID:'ses_a',id:'assistant2',parentID:user,time:{completed:5000},finish:'stop'});
+  message({role:'assistant',sessionID:'ses_a',id:'assistant2',parentID:user,time:{completed:5000},finish:'stop'});
+  const spans=rows.filter(r=>r.action==='runtime_complete');assert.equal(spans.length,1);
+  assert.equal(spans[0].duration_ms,4000);assert.equal(spans[0].message_id,user);
+  assert.equal(headers.headers.traceparent,`00-${trace}-${spans[0].span_id}-01`);
+  assert.equal(rows[0].parent_span_id,spans[0].span_id);
+  message({role:'assistant',sessionID:'ses_other',id:'assistant3',parentID:user,time:{completed:7000},finish:'stop'});
+  assert.equal(rows.filter(r=>r.action==='runtime_complete').length,1);
+ }finally{console.log=original;await hook.dispose();}
+});

@@ -1,10 +1,11 @@
 import { navigateTo } from "./navigation";
 import { useEffect, useRef, useState } from "react";
-import { Dict, remote } from "./api";
+import { Dict, remote, download } from "./api";
 import { operationLabel, localTime } from "./operation-labels";
 
 export function JobHistory() {
-  const [offset, setOffset] = useState(0), [data, setData] = useState<Dict>({ items: [], total: 0 });
+  const [data, setData] = useState<Dict>({ items: [], total: 0 });
+  const [downloading, setDownloading] = useState(false);
   const [error, setError] = useState(''), [busy, setBusy] = useState(false), [detail, setDetail] = useState<Dict | null>(null);
   const generation = useRef(0);
   const pending = useRef(false);
@@ -14,19 +15,18 @@ export function JobHistory() {
     const id = ++generation.current;
     pending.current = true;
     setBusy(true);
-    try { const value = await remote(`/cloud/admin/jobs?offset=${offset}&limit=25`); if (id === generation.current) { setData(value); setError(''); } }
+    try { const value = await remote('/cloud/admin/jobs?offset=0&limit=50'); if (id === generation.current) { setData(value); setError(''); } }
     catch (e: any) { if (id === generation.current) setError(e.message); }
     finally { if (id === generation.current) { pending.current = false; setBusy(false); } }
   }
   useEffect(() => {
     void refresh();
-    const t = setInterval(() => { if (!document.hidden && !pending.current) void refresh(); }, 5000);
-    return () => { ++generation.current; pending.current = false; clearInterval(t); };
-  }, [offset]);
+    return () => { ++generation.current; pending.current = false; };
+  }, []);
   const shown = detail && (data.items.find((j: Dict) => j.id === detail.id) || detail);
   return <section className="panel">
-    <div className="section-heading"><h3>任务记录</h3><button className="secondary" disabled={busy} onClick={refresh}>{busy ? '加载中…' : '刷新任务'}</button></div>
-    <p className="muted">每 5 秒更新。查看任务详情可核对执行阶段、错误和关联调用链。</p>
+    <div className="section-heading"><h3>任务记录</h3><div className="actions"><button className="secondary" disabled={downloading} onClick={async()=>{setDownloading(true);try{await download('/cloud/admin/jobs/export','operation-history.json');}catch(e:any){setError(e.message);}finally{setDownloading(false);}}}>{downloading?'下载中…':'下载完整记录'}</button><button className="secondary" disabled={busy} onClick={refresh}>{busy ? '加载中…' : '刷新任务'}</button></div></div>
+    <p className="muted">展示最近 50 条，进入页面时更新一次；需要最新状态时点击刷新。完整保留记录可下载查看。</p>
     {error && <p className="notice error" role="alert">{error}</p>}
     {!busy && !data.items.length && <p className="muted">暂无发布或运维任务。提交操作后可在这里跟踪结果。</p>}
     {data.items.map((j: Dict) => <div className="resource-row" key={j.id}>
@@ -51,8 +51,6 @@ export function JobHistory() {
       {shown.trace_id && <p>Trace ID：<code>{shown.trace_id}</code> <button className="secondary" onClick={() => navigateTo(`/admin?tab=logs&trace=${encodeURIComponent(shown.trace_id)}`)}>查看调用链</button></p>}
       {shown.error && <p role="alert" className="notice error">{shown.error}</p>}
     </section>}
-    <div className="actions"><button className="secondary" disabled={busy || !offset} onClick={() => setOffset(Math.max(0, offset - 25))}>上一页</button>
-      <span>{data.total ? offset + 1 : 0}–{Math.min(offset + 25, data.total)} / {data.total} 条</span>
-      <button className="secondary" disabled={busy || offset + 25 >= data.total} onClick={() => setOffset(offset + 25)}>下一页</button></div>
+    <p className="muted">显示 {data.items.length} 条 / 共 {data.total} 条</p>
   </section>;
 }

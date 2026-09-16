@@ -234,6 +234,7 @@ def test_first_chunk_is_observable_before_upstream_finishes(
         assert first == b"data: first\n\n"
         assert stream.finished.is_set() is False
         assert tracker.active == 1
+        assert sum(sandboxes.event_subscribers.values()) == 1
         stream.continue_event.set()
         assert await iterator.__anext__() == b"data: second\n\n"
         with pytest.raises(StopAsyncIteration):
@@ -243,6 +244,7 @@ def test_first_chunk_is_observable_before_upstream_finishes(
     assert stream.closed is True
     assert tracker.active == 0
     assert len(sandboxes.release_calls) == 1
+    assert sandboxes.event_subscribers == {}
 
 
 def test_cancel_close_releases_upstream_sandbox_and_gauge(

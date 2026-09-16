@@ -84,3 +84,14 @@ def test_tool_marker_only_retains_valid_timing_and_identity():
     assert 'SECRET' not in json.dumps(result) and 'PRIVATE' not in json.dumps(result)
     event['end_time_ms']=99;assert module.plugin_event(encode()) is None
     event['end_time_ms']=None;assert module.plugin_event(encode()) is None
+
+
+def test_runtime_scope_preserves_source_end_time_without_prompt_text():
+    import importlib.util
+    spec=importlib.util.spec_from_file_location('runtime_scope_test',WRITER)
+    module=importlib.util.module_from_spec(spec);spec.loader.exec_module(module)
+    item={'action':'runtime_complete','span_id':'b'*16,'session_id':'ses_a','message_id':'msg_a',
+          'start_time_ms':1000,'end_time_ms':5000,'text':'PRIVATE'}
+    result=module.plugin_event(module.PLUGIN_EVENT_PREFIX+json.dumps(item).encode())
+    assert result['duration_ms']==4000 and result['timestamp'].endswith('00:00:05+00:00')
+    assert 'PRIVATE' not in json.dumps(result)

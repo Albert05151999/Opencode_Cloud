@@ -210,3 +210,22 @@ def test_lost_commit_and_status_response_never_rolls_back_possibly_committed_rel
         await asyncio.gather(*(c.aclose() for c in runtime.clients.values()))
 
     asyncio.run(scenario())
+def test_destroy_finishes_in_on_demand_state_and_reconcile_requires_no_container(tmp_path):
+    async def scenario():
+        runtime=make_runtime(tmp_path)
+        job,_=runtime.store.submit('sandbox.destroy','sid',{'request_id':'destroy-job-0001'},scope='a')
+        async def call(service,path,payload=None,method=None):
+            if path.endswith('/actions'):
+                assert payload['action']=='destroy'
+                return {'ok':True}
+            return {'status':'destroyed','container_id':None}
+        runtime.call=call
+        await runtime.run(job['id'])
+        assert runtime.store.get(job['id'])['status']=='succeeded'
+        assert runtime.store.state('desired:sid') == {'state':'on_demand'}
+        runtime.store.update(job['id'],status='needs_recovery',checkpoint='apply')
+        await runtime.reconcile(job['id'],'reconcile-destroy-0001')
+        assert runtime.store.get(job['id'])['status']=='succeeded'
+        assert runtime.store.state('desired:sid') == {'state':'on_demand'}
+        await asyncio.gather(*(c.aclose() for c in runtime.clients.values()))
+    asyncio.run(scenario())

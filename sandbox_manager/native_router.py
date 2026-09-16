@@ -494,6 +494,10 @@ async def _stream_sse(
         response_headers.pop("content-encoding", None)
 
     cleanup_task: asyncio.Task[None] | None = None
+    observers = getattr(sandboxes, "event_subscribers", None)
+    if observers is None:
+        observers = sandboxes.event_subscribers = {}
+    observers[endpoint.sandbox_id] = observers.get(endpoint.sandbox_id, 0) + 1
 
     async def perform_cleanup() -> None:
         error: BaseException | None = None
@@ -509,6 +513,11 @@ async def _stream_sse(
                     if error is None:
                         error = exc
                 finally:
+                    remaining = observers.get(endpoint.sandbox_id, 0) - 1
+                    if remaining > 0:
+                        observers[endpoint.sandbox_id] = remaining
+                    else:
+                        observers.pop(endpoint.sandbox_id, None)
                     try:
                         await sandboxes.release(endpoint)
                     except BaseException as exc:

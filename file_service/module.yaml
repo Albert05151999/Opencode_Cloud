@@ -1,6 +1,6 @@
 {
   "module_id": "file_service",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "entrypoint": "file_service.main",
   "build": {
     "sources": [

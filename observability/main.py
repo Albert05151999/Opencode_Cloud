@@ -13,6 +13,7 @@ from datetime import datetime, timezone, timedelta
 from pathlib import Path
 
 from fastapi import FastAPI, HTTPException, Query
+from starlette.responses import StreamingResponse
 
 from shared_libs.service import configure_service, run, settings
 
@@ -252,15 +253,53 @@ def create_app(config=None):
         module: str | None = None,
         trace_id: str | None = None,
         job_id: str | None = None,
+        session_id: str | None = None,
         limit: int = Query(100, ge=1, le=1000),
     ):
-        return query(module=module, trace_id=trace_id, job_id=job_id, limit=limit)
+        return query(module=module, trace_id=trace_id, job_id=job_id, session_id=session_id, limit=limit)
+
+    @application.get("/cloud/logs/export")
+    def export_logs(module: str | None = None, trace_id: str | None = None,
+                    session_id: str | None = None, job_id: str | None = None):
+        if module and not NAME.fullmatch(module):
+            raise HTTPException(400, "Invalid module")
+        if trace_id and not re.fullmatch(r"[0-9a-f]{32}", trace_id):
+            raise HTTPException(400, "Invalid trace ID")
+        search = root / module if module else root
+        if search.is_symlink():
+            raise HTTPException(400, "Invalid log path")
+        def lines():
+            # Stream retained files, without the interactive query's tail limits.
+            for path in sorted(search.glob("**/events.jsonl*")):
+                if path.is_symlink() or not re.fullmatch(r"events\.jsonl(?:\.\d+)?", path.name):
+                    continue
+                if not path.resolve().is_relative_to(root):
+                    continue
+                try:
+                    with path.open("rb") as stream:
+                        for line in stream:
+                            try:
+                                event = json.loads(line)
+                            except (ValueError, UnicodeError):
+                                continue
+                            if not isinstance(event, dict):
+                                continue
+                            if any(value and event.get(key) != value for key, value in
+                                   (("trace_id", trace_id), ("session_id", session_id), ("job_id", job_id))):
+                                continue
+                            yield (json.dumps(json_safe(event), ensure_ascii=False) + "\n").encode("utf-8")
+                except FileNotFoundError:
+                    continue  # A rotated file may expire during the export.
+        return StreamingResponse(lines(), media_type="application/x-ndjson",
+            headers={"Content-Disposition": 'attachment; filename="module-logs.jsonl"',
+                     "X-Log-Coverage": "retained-files"})
 
     @application.get("/cloud/traces")
     def traces(
         trace_id: str | None = None,
         session_id: str | None = None,
         exclude_health: bool = True,
+        session_only: bool = False,
         limit: int = Query(50, ge=1, le=200),
     ):
         if trace_id is not None and not re.fullmatch(r"[0-9a-f]{32}", trace_id):
@@ -276,6 +315,7 @@ def create_app(config=None):
             ordered=sorted(events,key=lambda e:e.get("timestamp", "")); spans,_,module_ms=aggregate(ordered)
             modules = sorted({span["module"] for span in spans if span["module"]})
             if session_id and not any(e.get("session_id")==session_id for e in ordered): continue
+            if session_only and not any(e.get("session_id") for e in ordered): continue
             entry = next(
                 (event for event in ordered
                  if event.get("module") == "api_gateway" and event.get("action") == "http_request"),
@@ -313,6 +353,17 @@ def create_app(config=None):
         items.sort(key=lambda item:item["ended_at"] or "",reverse=True)
         return {"items":items[:limit],"next_cursor":None,"truncated":result["truncated"] or len(items)>limit,
             "partial":result["coverage"]["partial"],"coverage":result["coverage"]}
+
+    @application.get("/cloud/traces/sessions/{session_id}")
+    def session_history(session_id: str, limit: int = Query(50, ge=1, le=200)):
+        from observability.session_timeline import session_timeline
+        if not NAME.fullmatch(session_id):
+            raise HTTPException(400, "Invalid session ID")
+        result = query(session_id=session_id, limit=1000)
+        timeline = session_timeline(result["items"], limit)
+        return {**timeline, "session_id": session_id,
+                "truncated": result["truncated"] or timeline["truncated"],
+                "partial": result["coverage"]["partial"], "coverage": result["coverage"]}
 
     @application.get("/cloud/traces/{trace_id}")
     def trace(trace_id: str):

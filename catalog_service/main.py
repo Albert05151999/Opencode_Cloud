@@ -108,7 +108,7 @@ def create_app(data_root=None):
             image=os.environ.get(
                 "AGENT_RUNTIME_IMAGE",
                 options.get(
-                    "agent_runtime_image", "opencode-cloud/agent_runtime:1.0.0"
+                    "agent_runtime_image", "opencode-cloud/agent_runtime:1.0.2"
                 ),
             ),
             **{

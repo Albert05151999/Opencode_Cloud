@@ -280,15 +280,6 @@ class LoadTestStore:
             and (row[0] in ACTIVE or json.loads(row[1])["cleanup_status"] == "cleaning")
         )
 
-    def active_agent(self, aid):
-        with self.store.connect() as db:
-            placeholders = ",".join("?" for _ in ACTIVE)
-            row = db.execute(
-                f"SELECT 1 FROM load_test_users u JOIN load_tests r ON r.id=u.run_id WHERE u.agent_id=? AND r.status IN ({placeholders}) LIMIT 1",
-                (aid, *ACTIVE),
-            ).fetchone()
-        return row is not None
-
     def update(self, rid, **values):
         with self.store.connect() as db:
             db.execute("BEGIN IMMEDIATE")

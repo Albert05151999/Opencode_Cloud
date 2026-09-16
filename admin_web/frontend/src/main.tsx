@@ -1,5 +1,5 @@
 import { navigateTo } from "./navigation";
-import React, { useEffect, useState } from "react";
+import { useEffect, useState } from "react";
 import { createRoot } from "react-dom/client";
 import {
   Sparkles,

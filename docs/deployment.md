@@ -29,7 +29,9 @@ cd /mnt/e/Project_Space/Opencode_Cloud
 python3 build_image/build.py bundle
 ```
 
-Linux 工作站在自己的仓库目录执行同一 Python 命令。成功生成 `artifacts/releases/release-0.3.2.tar.gz`，包含镜像、脚本和配置。
+Linux 工作站在自己的仓库目录执行同一 Python 命令。成功生成 `artifacts/releases/release-0.3.7.tar.gz`，包含镜像、脚本和配置。
+
+在 WSL 验证服务器安装时，把归档解压到 Linux 文件系统（例如 `~/opencode-install-test`），不要把 Windows 挂载盘上的构建输出目录直接作为服务器运行数据目录。构建可以在 `/mnt/e/...` 执行，安装后的目录权限、文件锁和容器挂载需要 Linux 语义。Windows 上的本地 Web 不受此限制。
 
 根 `.env` 的服务及模型字段进入私有包，凭据不进入 Docker 镜像层。传递完整归档即可。`--prepare-only` 只准备材料，不产生可安装包。
 
@@ -47,8 +49,8 @@ docker compose version
 
 ```bash
 cd ~
-tar -xzf release-0.3.2.tar.gz
-cd release-0.3.2
+tar -xzf release-0.3.7.tar.gz
+cd release-0.3.7
 sh install.sh
 ./status.sh
 curl -fsS http://127.0.0.1:18080/cloud/health
@@ -65,7 +67,7 @@ curl -fsS http://127.0.0.1:18080/cloud/health
 归档固定保存脚本权限，安装也会补齐。解压工具丢失权限时：
 
 ```bash
-cd ~/release-0.3.2
+cd ~/release-0.3.7
 chmod 755 ./*.sh
 sh install.sh
 ```
@@ -105,13 +107,13 @@ curl -fsS http://127.0.0.1:18080/cloud/health
 Windows 安装 Python、Node.js/npm。在 **PowerShell、仓库根目录**执行：
 
 ```powershell
-python admin_web/build.py --version 0.3.2
+python admin_web/build.py --version 0.3.7
 powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\admin_web\scripts\start.ps1
 ```
 
 构建安装并编译前端，启动脚本自动创建 Python 环境、安装依赖并打开浏览器。首次安装需联网。终端保持运行，停止按 `Ctrl+C`。
 
-独立包位于 `artifacts/admin_web/0.3.2/admin_web-0.3.2.tar.gz`。在空目录解压，进入包含 `admin_web` 子目录的目录，运行上面的 PowerShell 启动命令即可；独立包不需要源码和 Node.js。
+独立包位于 `artifacts/admin_web/0.3.7/admin_web-0.3.7.tar.gz`。在空目录解压，进入包含 `admin_web` 子目录的目录，运行上面的 PowerShell 启动命令即可；独立包不需要源码和 Node.js。
 
 默认页面为 `http://127.0.0.1:18765`。PowerShell 不使用 Linux 的 `sh install.sh`。Linux 本地客户端在构建后使用 `sh admin_web/scripts/install.sh`、`sh admin_web/scripts/start.sh`。
 
@@ -127,6 +129,8 @@ powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\admin_web\scripts\star
 
 ## 7. 日常管理
 
+沙箱详情会分别显示执行请求连接和事件订阅连接。打开会话页面产生的 SSE 事件订阅不代表 Agent 正在执行，也不会阻止正常发布、重启或销毁。真实运行中的模型或工具调用仍会阻止这些操作；若状态显示“未知”，请先检查沙箱运行状态和日志，不要仅凭没有打开页面就强制操作。
+
 在服务器发布目录执行：
 
 ```bash
@@ -137,3 +141,11 @@ powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\admin_web\scripts\star
 ```
 
 停止不删除数据，删除发布目录会删除其中的数据。新版本解压到新目录，避免覆盖运行目录。镜像标签来自各模块版本，整包版本来自根 `VERSION`。默认流程使用 IP 入口；域名、HTTPS 和自定义资源配置是额外部署选项。
+
+### 保留数据升级
+
+先确认 Agent 没有执行任务，再解压新版。保留原来的 `.env`、`data`、`log` 和 `DEPLOY_ROOT`，不要用归档内的预设覆盖已有平台配置。可以在新版目录中将 `data`、`log` 链接到原目录，复制原 `.env`，然后执行新版 `sh install.sh`。Compose 项目名必须保持一致，安装会替换服务容器并复用数据；旧版的 `image-override-*.json` 不要带入新版。
+
+此方式下旧目录仍承载真实数据，不能删除旧目录。默认 Agent 镜像升级需在空闲时重新发布 Agent；先核对草稿与当前生效配置，避免把尚未确认的草稿一起发布。发布后验证一次真实聊天及工具调用，再清理没有任何容器引用的旧 `opencode-cloud/*` 镜像。不要使用带卷删除的全局清理命令。
+
+各服务的职责、数据位置和调用计时含义见[模块说明](modules.md)。

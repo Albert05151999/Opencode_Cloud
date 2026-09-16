@@ -73,3 +73,31 @@ test('permanent deletion waits for the job then refreshes the Agent list',async(
   await page.route('**/remote/cloud/admin/jobs/deleting',r=>{deleted=++polls>1;return r.fulfill({json:{id:'deleting',kind:'agent.delete',status:deleted?'succeeded':'running'}})});
   await page.goto('/admin?tab=agents');await page.getByLabel('显示归档与删除中 Agent').check();await page.getByRole('button',{name:'永久删除…'}).click();await page.getByLabel('确认删除 Agent ID').fill('delete-test');await page.getByRole('button',{name:'确认永久删除'}).click();await expect(page.getByRole('status')).toContainText('删除任务处理中');await expect(page.getByRole('heading',{name:'Delete fixture'})).toHaveCount(0);expect(polls).toBeGreaterThan(1);
 });
+test('job history loads only on entry or manual refresh and exports all records',async({page})=>{
+ let reads=0;
+ await page.clock.install();
+ await page.route('**/remote/cloud/admin/jobs?*',r=>{reads++;expect(new URL(r.request().url()).searchParams.get('limit')).toBe('50');return r.fulfill({json:{items:[],total:0}})});
+ await page.goto('/admin?tab=models');await page.clock.fastForward(15000);expect(reads).toBe(0);
+ await page.getByRole('button',{name:'发布记录',exact:true}).click();await expect.poll(()=>reads).toBe(1);
+ await page.clock.fastForward(15000);expect(reads).toBe(1);
+ await page.getByRole('button',{name:'刷新任务'}).click();await expect.poll(()=>reads).toBe(2);
+ const download=page.waitForEvent('download');
+ await page.getByRole('button',{name:'下载完整记录'}).click();await download;
+ await page.getByRole('button',{name:'模型',exact:true}).click();await page.clock.fastForward(15000);expect(reads).toBe(2);
+});
+
+for(const kind of ['mcp','skill','hook']) test(`${kind} archive filter, restore and delete preserve explicit lifecycle`,async({page})=>{
+ let archived=true,deleted=false;
+ await page.route('**/remote/cloud/admin/catalog?*',r=>r.fulfill({json:{...catalog,resources:deleted?{}:{sample:{id:'sample',kind,name:'sample',archived,owner:null,draft:{data:{}},versions:[]}}}}));
+ await page.route('**/remote/cloud/admin/resources/sample/restore',r=>{archived=false;return r.fulfill({json:{ok:true}})});
+ await page.route('**/remote/cloud/admin/resources/sample/archive',r=>{archived=true;return r.fulfill({json:{ok:true}})});
+ await page.route('**/remote/cloud/admin/resources/sample?*',r=>{expect(r.request().method()).toBe('DELETE');deleted=true;return r.fulfill({json:{ok:true}})});
+ page.on('dialog',d=>d.accept());
+ await page.goto('/admin?tab='+kind);
+ await expect(page.getByRole('button',{name:'恢复',exact:true})).toHaveCount(0);
+ await page.getByLabel(/显示归档与删除中/).check();
+ await page.getByRole('button',{name:'恢复',exact:true}).click();await expect(page.getByRole('button',{name:'归档',exact:true})).toBeVisible();
+ await page.getByRole('button',{name:'归档',exact:true}).click();
+ await page.getByRole('button',{name:'永久删除',exact:true}).click();
+ await expect(page.getByRole('button',{name:'永久删除',exact:true})).toHaveCount(0);
+});

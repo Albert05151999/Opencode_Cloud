@@ -29,7 +29,6 @@ import {
   Network,
   Layers,
   History,
-  Server,
   Copy,
   Activity,
   Gauge,
@@ -38,17 +37,17 @@ import {
 import { bootstrap, request, remote, Dict, download } from "./api";
 
 const tabs = [
-  ["logs", "日志与调用链", "≋"],
-  ["load-tests", "压测", "▷"],
-  ["transfer", "导入导出", "⇄"],
-  ["sandboxes", "沙箱", "◇"],
-  ["models", "模型", "◈"],
-  ["agents", "Agents", "◇"],
-  ["mcp", "MCP", "⌘"],
-  ["skill", "Skills", "▤"],
-  ["hook", "Hook", "⌁"],
-  ["jobs", "发布记录", "↻"],
-  ["connection", "连接设置", "◎"],
+  ["logs", "日志与调用链"],
+  ["load-tests", "压测"],
+  ["transfer", "导入导出"],
+  ["sandboxes", "沙箱"],
+  ["models", "模型"],
+  ["agents", "Agents"],
+  ["mcp", "MCP"],
+  ["skill", "Skills"],
+  ["hook", "Hook"],
+  ["jobs", "发布记录"],
+  ["connection", "连接设置"],
 ];
 const emptyAgent = (id = "") => ({
   id,
@@ -71,6 +70,7 @@ export function Admin({
   onConnection: (v: Dict) => void;
 }) {
   const [showArchived, setShowArchived] = useState(false);
+  const [deletingResource, setDeletingResource] = useState<string | null>(null);
   const [tab, setTabState] = useState(currentAdminTab),
     [catalog, setCatalog] = useState<Dict>({
       models: {},
@@ -119,6 +119,7 @@ export function Admin({
   }, [boot.url, boot.credential_configured]);
   useEffect(() => {
     if (
+      tab === "jobs" ||
       !Object.values(catalog.jobs).some((j: any) =>
         ["queued", "running", "validating", "waiting", "applying"].includes(j.status),
       )
@@ -126,7 +127,7 @@ export function Admin({
       return;
     const timer = setInterval(() => { if (!document.hidden && !catalogPending.current) void reload(); }, 2500);
     return () => clearInterval(timer);
-  }, [catalog.jobs]);
+  }, [catalog.jobs, tab]);
   async function action(fn: () => Promise<any>, message = "操作完成") {
     if (actionPending.current) throw Error("已有操作正在执行，请等待完成后再试。");
     actionPending.current = true;
@@ -162,7 +163,7 @@ export function Admin({
             (a: any) =>
               showArchived || !["archived", "deleting"].includes(a.lifecycle),
           )
-        : Object.values(catalog.resources).filter((r: any) => r.kind === tab);
+        : Object.values(catalog.resources).filter((r: any) => r.kind === tab && (showArchived || (!r.archived && r.id !== deletingResource)));
   const openNew = () =>
     setEditor(
       tab === "models"
@@ -295,7 +296,7 @@ export function Admin({
         </button>
       </div>
       <div className="admin-tabs">
-        {tabs.map(([id, title, icon]) => (
+        {tabs.map(([id, title]) => (
           <button
             key={id}
             aria-label={title}
@@ -393,14 +394,14 @@ export function Admin({
               </p>
             </div>
             <div className="actions">
-              {tab === "agents" && (
+              {["agents", "mcp", "skill", "hook"].includes(tab) && (
                 <label className="checkbox">
                   <input
                     type="checkbox"
                     checked={showArchived}
                     onChange={(e) => setShowArchived(e.target.checked)}
                   />
-                  显示归档与删除中 Agent
+                  显示归档与删除中 {tab === "agents" ? "Agent" : tab === "skill" ? "Skill" : tab.toUpperCase()}
                 </label>
               )}
               {tab === "models" && (
@@ -631,7 +632,7 @@ export function Admin({
                         : entry.legacy
                           ? "已有模型"
                           : "候选配置"
-                      : entry.archived
+                      : entry.id === deletingResource ? "删除中…" : entry.archived
                         ? "已归档"
                         : entry.versions.length
                           ? `v${entry.versions.length}`
@@ -659,9 +660,15 @@ export function Admin({
                       </button>
                     ) : (
                       <>
+                        <button className="text-button" disabled={loading} onClick={()=>safe(()=>remote(`/cloud/admin/resources/${entry.id}/${entry.archived?'restore':'archive'}`,'POST',{revision:catalog.revision}),entry.archived?'资源已恢复':'资源已归档')}>{entry.archived?'恢复':'归档'}</button>
+                        {entry.archived&&<button className="text-button" disabled={loading} onClick={()=>{
+                          if(!confirm(`永久删除资源 ${entry.name||entry.id}？草稿、历史版本或模板仍有引用时不能删除。`))return;
+                          setDeletingResource(entry.id);
+                          void safe(()=>remote(`/cloud/admin/resources/${entry.id}?revision=${catalog.revision}`,'DELETE'),'资源已删除').finally(()=>setDeletingResource(null));
+                        }}>永久删除</button>}
                         <button
                           className="text-button"
-                          disabled={loading}
+                          disabled={loading || entry.archived}
                           onClick={() =>
                             safe(() => publishResource(entry), "资源版本已发布")
                           }

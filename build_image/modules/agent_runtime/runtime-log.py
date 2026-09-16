@@ -23,7 +23,7 @@ def plugin_event(line):
         return None
     try: value=json.loads(line[len(PLUGIN_EVENT_PREFIX):])
     except (UnicodeDecodeError,json.JSONDecodeError): return None
-    if not isinstance(value,dict) or value.get('action') not in {'model_dispatch','tool_complete','tool_error'}: return None
+    if not isinstance(value,dict) or value.get('action') not in {'model_dispatch','tool_complete','tool_error','runtime_complete','runtime_error'}: return None
     action=value['action']
     result={'action':action,'event_kind':'instant' if action=='model_dispatch' else 'span'}
     for name in ('session_id','message_id','logical_model','part_id','call_id','tool'):
@@ -32,12 +32,17 @@ def plugin_event(line):
     trace_id=value.get('trace_id'); span_id=value.get('span_id')
     if isinstance(trace_id,str) and re.fullmatch(r'[0-9a-f]{32}',trace_id) and int(trace_id,16): result['trace_id']=trace_id
     if isinstance(span_id,str) and re.fullmatch(r'[0-9a-f]{16}',span_id) and int(span_id,16): result['span_id']=span_id
+    parent=value.get('parent_span_id')
+    if isinstance(parent,str) and re.fullmatch(r'[0-9a-f]{16}',parent) and int(parent,16): result['parent_span_id']=parent
     if action != 'model_dispatch':
         start,end=value.get('start_time_ms'),value.get('end_time_ms')
-        if type(start) is not int or type(end) is not int or start < 0 or not 0 <= end-start <= 86400000: return None
-        if not all(name in result for name in ('trace_id','span_id','session_id','message_id','part_id','call_id','tool')): return None
+        if type(start) is not int or type(end) is not int or start < 0 or end > 253402300799999 or not 0 <= end-start <= 86400000: return None
+        required=('span_id','session_id','message_id') if action.startswith('runtime_') else ('trace_id','span_id','session_id','message_id','part_id','call_id','tool')
+        if not all(name in result for name in required): return None
         result.update(duration_ms=end-start,start_time_ms=start,end_time_ms=end)
+        result['timestamp']=datetime.datetime.fromtimestamp(end/1000,datetime.timezone.utc).isoformat()
         if action=='tool_error': result['error_code']='ToolExecutionError'
+        if action=='runtime_error': result['error_code']='RuntimeExecutionError'
     return result
 
 

@@ -10,8 +10,6 @@ from datetime import datetime, timezone
 from pathlib import Path
 
 import httpx
-from fastapi import APIRouter
-from starlette.responses import JSONResponse
 
 from shared_libs.metrics import PlatformMetrics
 from sandbox_manager.backend import LocalDockerBackend
@@ -275,16 +273,3 @@ class HealthMonitor:
                 logger.exception("health monitor tick failed")
             await asyncio.sleep(self.backend.config.sandbox.health_interval_seconds)
 
-
-def create_health_router(monitor: HealthMonitor) -> APIRouter:
-    router = APIRouter()
-
-    @router.get("/cloud/health/ready")
-    async def readiness():
-        checks = await monitor.readiness()
-        ready = all(checks.values())
-        return JSONResponse(
-            {"ok": ready, "checks": checks}, status_code=200 if ready else 503
-        )
-
-    return router
