@@ -5,7 +5,8 @@ export function RecoverySettings() {
   const [agents, setAgents] = useState<string[]>([]),
     [backoff, setBackoff] = useState("30,60,120");
   const [policy, setPolicy] = useState<Dict | null>(null),
-    [message, setMessage] = useState("");
+    [message, setMessage] = useState(""),
+    [busy, setBusy] = useState(false);
   useEffect(() => {
     let active = true;
     remote("/cloud/admin/recovery-policy")
@@ -39,17 +40,25 @@ export function RecoverySettings() {
         <form
           onSubmit={async (e) => {
             e.preventDefault();
+            if (busy) return;
+            const intervals = backoff.split(/[,，]/).map(v => v.trim());
+            if (!intervals.length || intervals.length > 10 || intervals.some(v => !/^\d+$/.test(v) || Number(v) < 1 || Number(v) > 3600)) {
+              setMessage('请填写 1–10 个整数间隔，每项为 1–3600 秒，以逗号分隔。');
+              return;
+            }
+            setBusy(true);
+            setMessage('');
             try {
               setPolicy(
                 await remote("/cloud/admin/recovery-policy", "PUT", {
                   ...policy,
-                  backoff_seconds: backoff.split(",").map(Number),
+                  backoff_seconds: intervals.map(Number),
                 }),
               );
               setMessage("恢复策略已保存");
             } catch (e: any) {
               setMessage(e.message);
-            }
+            } finally { setBusy(false); }
           }}
         >
           <label className="checkbox">
@@ -108,7 +117,7 @@ export function RecoverySettings() {
               {id}
             </label>
           ))}
-          <button className="primary">保存策略</button>
+          <button className="primary" disabled={busy}>{busy ? "保存中…" : "保存策略"}</button>
         </form>
       )}
     </details>

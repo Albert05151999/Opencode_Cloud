@@ -819,6 +819,7 @@ export function Chat({ onConnect }: { onConnect: () => void }) {
               </button>
               <button
                 className="icon"
+                aria-label="关闭文件面板"
                 onClick={() => {
                   fileView.current = null;
                   fileRequest.current++;

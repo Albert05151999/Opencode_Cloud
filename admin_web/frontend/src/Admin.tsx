@@ -1,3 +1,4 @@
+import { currentAdminTab, navigateTo } from "./navigation";
 import { waitForPublish } from "./publishing";
 import { Observability } from "./Observability";
 import { LoadTests } from "./LoadTests";
@@ -9,7 +10,7 @@ import { ModelDeployments, PasteModel } from './ModelDeployments';
 import { ResourceTransfer } from "./ResourceTransfer";
 import { Operations } from "./Operations";
 import { ConfigurationView, FormConfigPreview } from "./ConfigPreview";
-import { useEffect, useState, useId, cloneElement } from "react";
+import { useEffect, useState, useId, useRef, cloneElement } from "react";
 import {
   Plus,
   RefreshCw,
@@ -70,10 +71,7 @@ export function Admin({
   onConnection: (v: Dict) => void;
 }) {
   const [showArchived, setShowArchived] = useState(false);
-  const [tab, setTab] = useState(() => {
-    const requested = new URLSearchParams(location.search).get("tab");
-    return requested === "logs" || requested === "agents" ? requested : "models";
-  }),
+  const [tab, setTabState] = useState(currentAdminTab),
     [catalog, setCatalog] = useState<Dict>({
       models: {},
       agents: {},
@@ -87,20 +85,38 @@ export function Admin({
     [editor, setEditor] = useState<Dict | null>(null),
     [preview, setPreview] = useState<Dict | null>(null),
     [importing, setImporting] = useState(false);
+  const setTab = (value: string) => navigateTo(`/admin?tab=${value}`);
+  useEffect(() => {
+    document.querySelector('.admin-tabs button.active')?.scrollIntoView({ block: 'nearest', inline: 'nearest' });
+  }, [tab]);
+  useEffect(() => {
+    const update = () => setTabState(currentAdminTab());
+    window.addEventListener('popstate', update);
+    return () => window.removeEventListener('popstate', update);
+  }, []);
+  const actionPending = useRef(false);
+  const catalogSequence = useRef(0);
+  const catalogPending = useRef(false);
   const reload = async () => {
+    const sequence = ++catalogSequence.current;
+    catalogPending.current = true;
     try {
       const c = await remote("/cloud/admin/catalog?compact=true");
+      if (sequence !== catalogSequence.current) return;
       setCatalog(c);
       setError("");
     } catch (e: any) {
+      if (sequence !== catalogSequence.current) return;
       setError(e.message);
       if (e.message.includes("credential") || e.message.includes("not found"))
         setTab("connection");
-    }
+    } finally { if (sequence === catalogSequence.current) catalogPending.current = false; }
   };
   useEffect(() => {
-    reload();
-  }, []);
+    setCatalog({ models: {}, agents: {}, resources: {}, jobs: {} });
+    void reload();
+    return () => { ++catalogSequence.current; };
+  }, [boot.url, boot.credential_configured]);
   useEffect(() => {
     if (
       !Object.values(catalog.jobs).some((j: any) =>
@@ -108,10 +124,12 @@ export function Admin({
       )
     )
       return;
-    const timer = setInterval(reload, 2500);
+    const timer = setInterval(() => { if (!document.hidden && !catalogPending.current) void reload(); }, 2500);
     return () => clearInterval(timer);
   }, [catalog.jobs]);
   async function action(fn: () => Promise<any>, message = "操作完成") {
+    if (actionPending.current) throw Error("已有操作正在执行，请等待完成后再试。");
+    actionPending.current = true;
     setLoading(true);
     setError("");
     setSuccess("");
@@ -121,13 +139,15 @@ export function Admin({
         setPublishing(true);
         await waitForPublish(result.job_id);
         setSuccess("发布成功，配置已生效");
-      } else setSuccess(message);
+      } else if (result?.ok === false) setError(String(result.error || result.detail || "测试失败，请查看诊断结果"));
+      else setSuccess(message);
       await reload();
       return result;
     } catch (e: any) {
       setError(e.message);
       throw e;
     } finally {
+      actionPending.current = false;
       setPublishing(false);
       setLoading(false);
     }
@@ -211,6 +231,7 @@ export function Admin({
           revision: catalog.revision,
         });
       }
+      if (!editor.existing && catalog.resources[value.id]) throw Error("资源 ID 已存在，请使用其他 ID，或关闭表单后编辑已有资源。");
       if (value.kind === "skill" && file) {
         const form = new FormData();
         form.set("file", file);
@@ -280,8 +301,6 @@ export function Admin({
             aria-label={title}
             className={tab === id ? "active" : ""}
             onClick={() => {
-              if (editor && !confirm("放弃未保存的表单修改？")) return;
-              setEditor(null);
               setTab(id);
               setSuccess("");
             }}
@@ -293,7 +312,7 @@ export function Admin({
       </div>
       {publishing && <div className="notice" role="status">已提交，正在等待发布结果。可在发布记录查看进度；配置尚未确认生效。</div>}
       {error && (
-        <div className="notice error">
+        <div className="notice error" role="alert">
           {error}
           {/Publish selected models|请先发布模型/.test(error)
             ? <button onClick={() => {setError(""); setTab("models");}}>配置并发布模型网关</button>
@@ -303,7 +322,7 @@ export function Admin({
         </div>
       )}
       {success && (
-        <div className="notice success">
+        <div className="notice success" role="status">
           <Check size={16} />
           {success}
         </div>
@@ -327,7 +346,7 @@ export function Admin({
           <Operations />
         </Capability>
       ) : tab === "connection" ? (
-        <Connection boot={boot} onSaved={onConnection} run={safe} />
+        <Connection boot={boot} onSaved={onConnection} run={safe} busy={loading} />
       ) : tab === "jobs" ? (
         <div className="panel">
           <div className="section-heading">
@@ -346,15 +365,11 @@ export function Admin({
               </span>
               <button
                 className="secondary"
-                onClick={() =>
-                  safe(
-                    () =>
-                      remote("/cloud/admin/models/apply", "POST", {
-                        version: v.version,
-                      }),
-                    "已提交回滚",
-                  )
-                }
+                disabled={loading || v.version === catalog.gateway_active}
+                onClick={() => {
+                  if (confirm(`将模型网关恢复到 v${v.version}？请确认该版本的配置适用于当前 Agent。`)) void safe(
+                    () => remote("/cloud/admin/models/apply", "POST", { version: v.version }), "已提交回滚");
+                }}
               >
                 恢复此版本
               </button>
@@ -778,10 +793,10 @@ export function Admin({
       )}
       {preview && (
         <div className="modal-backdrop">
-          <section className="modal">
+          <section className="modal" role="dialog" aria-modal="true" aria-label="配置与诊断">
             <div className="section-heading">
               <h2>配置与诊断</h2>
-              <button className="icon" onClick={() => setPreview(null)}>
+              <button className="icon" aria-label="关闭诊断" onClick={() => setPreview(null)}>
                 <X />
               </button>
             </div>
@@ -792,7 +807,9 @@ export function Admin({
                     <button
                       className="secondary"
                       key={v.version}
+                      disabled={loading || v.version === preview.active_version}
                       onClick={() => {
+                        if (!confirm(`将 Agent ${preview.agent_id} 恢复到 v${v.version}？这会重新发布该历史配置。`)) return;
                         const a = catalog.agents[preview.agent_id] as Dict;
                         if (a)
                           safe(() =>
@@ -817,12 +834,10 @@ export function Admin({
                   <button
                     className="file-row"
                     key={path}
-                    onClick={() =>
-                      download(
+                    onClick={() => void download(
                         `/cloud/admin/resources/${preview.id}/file?path=${encodeURIComponent(path)}`,
                         path.split("/").pop()!,
-                      )
-                    }
+                      ).catch(e => setError(e.message))}
                   >
                     {path}
                     <ArrowUpRight size={14} />
@@ -957,6 +972,24 @@ function Editor({
     [parameters, setParameters] = useState(
       JSON.stringify(editor.value.parameters || {}, null, 2),
     );
+  const formRef = useRef<HTMLFormElement>(null);
+  const dirty = JSON.stringify(v) !== JSON.stringify(editor.value) || !!file || parameters !== JSON.stringify(editor.value.parameters || {}, null, 2);
+  const close = () => { if (!busy && (!dirty || confirm('放弃未保存的表单修改？'))) onClose(); };
+  useEffect(() => {
+    const previous = document.activeElement as HTMLElement | null;
+    formRef.current?.querySelector<HTMLElement>('input:not(:disabled), select, textarea, button')?.focus();
+    return () => previous?.focus();
+  }, []);
+  useEffect(() => {
+    const beforeUnload = (e: BeforeUnloadEvent) => { if (dirty || busy) { e.preventDefault(); e.returnValue = ''; } };
+    const beforeNavigate = (e: Event) => {
+      if (busy || (dirty && !confirm('放弃未保存的表单修改？'))) e.preventDefault();
+      else onClose();
+    };
+    window.addEventListener('beforeunload', beforeUnload);
+    window.addEventListener('app-before-navigate', beforeNavigate);
+    return () => { window.removeEventListener('beforeunload', beforeUnload); window.removeEventListener('app-before-navigate', beforeNavigate); };
+  }, [dirty, busy, onClose]);
   const update = (key: string, value: any) =>
     setV((old) => ({ ...old, [key]: value }));
   const data = (key: string, value: any) =>
@@ -980,7 +1013,15 @@ function Editor({
     );
   return (
     <div className="modal-backdrop">
-      <form className="modal editor" role="dialog" aria-modal="true" aria-labelledby="configuration-editor-title" onSubmit={submit}>
+      <form ref={formRef} onKeyDown={e => {
+        if (e.key === 'Escape') { e.preventDefault(); close(); }
+        if (e.key === 'Tab') {
+          const items = Array.from(formRef.current!.querySelectorAll<HTMLElement>('button:not(:disabled), input:not(:disabled), select:not(:disabled), textarea:not(:disabled), a[href], [tabindex="0"]')).filter(el => el.getClientRects().length);
+          const first = items[0], last = items[items.length - 1];
+          if (e.shiftKey && document.activeElement === first) { e.preventDefault(); last?.focus(); }
+          else if (!e.shiftKey && document.activeElement === last) { e.preventDefault(); first?.focus(); }
+        }
+      }} className="modal editor" role="dialog" aria-modal="true" aria-labelledby="configuration-editor-title" onSubmit={submit}>
         <div className="section-heading">
           <div>
             <p className="eyebrow">
@@ -998,7 +1039,7 @@ function Editor({
                       : "MCP 配置"}
             </h2>
           </div>
-          <button type="button" className="icon" onClick={onClose}>
+          <button type="button" className="icon" aria-label="关闭编辑器" onClick={close} disabled={busy}>
             <X />
           </button>
         </div>
@@ -1566,7 +1607,7 @@ function Editor({
         />
         <footer className="modal-footer">
           <span className="muted">保存草稿 ≠ 发布生效</span>
-          <button type="button" className="secondary" onClick={onClose}>
+          <button type="button" className="secondary" onClick={close} disabled={busy}>
             取消
           </button>
           <button className="primary" disabled={busy}>
@@ -1581,7 +1622,9 @@ function Connection({
   boot,
   onSaved,
   run,
+  busy,
 }: {
+  busy: boolean;
   boot: Dict;
   onSaved: (v: Dict) => void;
   run: (fn: () => Promise<any>, message?: string) => Promise<any>;
@@ -1612,14 +1655,15 @@ function Connection({
           onChange={(e) => { setToken(e.target.value); setTestResult(null); }}
         />
       </Field>
-      <label className="checkbox">
+      {boot.credential_persistence_available && <label className="checkbox">
         <input
           type="checkbox"
           checked={remember}
           onChange={(e) => setRemember(e.target.checked)}
         />
         保存到 Windows Credential Manager
-      </label>
+      </label>}
+      {!boot.credential_persistence_available && <p className="muted">本机仅保存服务器地址；管理员凭据保留在当前服务进程内，重启本地服务后需重新填写。</p>}
       {!url.startsWith("https:") && (
         <div className="notice warning">
           HTTP 连接未加密，凭据和模型密钥将通过明文网络传输。
@@ -1628,11 +1672,12 @@ function Connection({
       <div className="actions">
         <button
           className="primary"
+          disabled={busy}
           onClick={() =>
             run(async () => {
               await request("/local/connection", "PUT", {
-                url,
-                token: token || undefined,
+                url: url.trim(),
+                token: token.trim() || undefined,
                 remember,
               });
               const b = await bootstrap();
@@ -1646,6 +1691,7 @@ function Connection({
         </button>
         <button
           className="secondary"
+          disabled={busy}
           onClick={() =>
             run(
               async () => {
@@ -1663,7 +1709,7 @@ function Connection({
             )
           }
         >
-          保存并测试连接
+          {busy ? "正在保存并检查…" : "保存并测试连接"}
         </button>
       </div>
       {testResult && (

@@ -1,3 +1,4 @@
+import { navigateTo } from "./navigation";
 import React, { useEffect, useState } from "react";
 import { createRoot } from "react-dom/client";
 import {
@@ -30,8 +31,7 @@ function App() {
     localStorage.setItem("theme", dark ? "dark" : "light");
   }, [dark]);
   const navigate = (p: string) => {
-    setPage(p);
-    history.pushState({}, "", `/${p}`);
+    navigateTo(`/${p}`);
   };
   useEffect(() => {
     const fn = () =>
@@ -85,15 +85,16 @@ function App() {
               </div>
               <button
                 className="connection-pill"
-                onClick={() => navigate("admin")}
+                onClick={() => navigateTo("/admin?tab=connection")}
+                aria-label="服务器连接设置"
               >
-                <span className="status-dot" />
+                <span className="status-dot" title="已配置的服务器地址；连接状态请在连接设置中测试" />
                 {new URL(boot.url).hostname}
                 <ArrowUpRight size={13} />
               </button>
             </header>
             {page === "chat" ? (
-              <Chat onConnect={() => navigate("admin")} />
+              <Chat onConnect={() => navigateTo("/admin?tab=connection")} />
             ) : (
               <Admin boot={boot} onConnection={setBoot} />
             )}

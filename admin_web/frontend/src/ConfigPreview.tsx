@@ -65,6 +65,13 @@ export function JsonConfig({
 }
 
 export function ConfigurationView({ value }: { value: Dict }) {
+  if (typeof value.ok === 'boolean') return <section aria-label="测试结果">
+    <div className={`notice ${value.ok ? 'success' : 'error'}`} role={value.ok ? 'status' : 'alert'}>
+      <strong>{value.ok ? '连接测试通过' : '连接测试失败'}</strong>
+      <p>{value.ok ? '服务器已完成测试请求。测试不会保存或发布配置。' : String(value.error || value.detail || '请检查地址、凭据和模型配置后重试。')}</p>
+    </div>
+    <details><summary>查看诊断数据</summary><pre className="json-view">{JSON.stringify(maskConfig(value), null, 2)}</pre></details>
+  </section>;
   if (value.scope === "resource-library")
     return (
       <>

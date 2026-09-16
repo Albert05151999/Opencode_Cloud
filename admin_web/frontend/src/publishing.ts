@@ -1,6 +1,6 @@
 import { remote } from './api';
 
-export async function waitForPublish(id: string) {
+export async function waitForPublish(id: string, label = "发布") {
   for (let attempt = 0; attempt < 300; attempt++) {
     const job = await remote(`/cloud/admin/jobs/${id}`);
     if (job.status === 'succeeded') {
@@ -13,8 +13,8 @@ export async function waitForPublish(id: string) {
       return job;
     }
     if (['failed', 'cancelled', 'needs_recovery', 'interrupted'].includes(job.status))
-      throw Error(`发布失败：${job.error || job.status}`);
+      throw Error(`${label}失败：${job.error || job.status}`);
     await new Promise(resolve => setTimeout(resolve, 1000));
   }
-  throw Error('发布仍在处理中，请在发布记录查看结果；当前尚未确认成功。');
+  throw Error(`${label}仍在处理中，请在发布记录查看结果；当前尚未确认成功。`);
 }

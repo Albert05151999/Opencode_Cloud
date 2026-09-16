@@ -1,3 +1,4 @@
+import { operationLabel } from "./operation-labels";
 import { useEffect, useState } from "react";
 import { Dict, remote } from "./api";
 
@@ -58,8 +59,8 @@ export function SandboxDetail({
       {data && (
         <>
           <p>
-            容器：{data.container_state} · 健康：{data.status} · 任务：
-            {data.execution} · 配置版本：{data.configuration_version ?? "未知"}
+            容器：{operationLabel(data.container_state)} · 健康：{operationLabel(data.status)} · 任务：
+            {operationLabel(data.execution)} · 配置版本：{data.configuration_version ?? "未知"}
           </p>
           <p>
             CPU：{data.cpu_percent == null ? "未知" : `${data.cpu_percent}%`} ·
@@ -78,7 +79,7 @@ export function SandboxDetail({
           <h4>最近操作</h4>
           {(data.operations || []).map((j: Dict) => (
             <p key={j.id}>
-              {j.kind} · {j.status}
+              {operationLabel(j.kind)} · {operationLabel(j.status)}
               {j.interrupted_sessions?.length ? " · 已记录会话中断" : ""}
             </p>
           ))}

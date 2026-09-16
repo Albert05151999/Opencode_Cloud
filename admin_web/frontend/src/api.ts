@@ -13,7 +13,11 @@ export async function request(
   headers: Record<string, string> = {},
 ) {
   const form = body instanceof FormData;
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), 130_000);
+  try {
   const response = await fetch(path, {
+    signal: controller.signal,
     method,
     headers: {
       ...(path.startsWith("/remote/") ? traceHeaders() : {}),
@@ -32,15 +36,21 @@ export async function request(
   try {
     result = text ? JSON.parse(text) : {};
   } catch {
-    result = { detail: text.slice(0, 300) };
+    throw new Error(`服务器返回了无法解析的响应（HTTP ${response.status}），请检查服务状态后重试。`);
   }
-  if (!response.ok)
-    throw Error(
-      typeof result.detail === "string"
-        ? result.detail
-        : `请求失败 (${response.status})`,
-    );
+  if (!response.ok) {
+    const detail = typeof result.detail === 'string' ? result.detail
+      : Array.isArray(result.detail) ? result.detail.map((item: Dict) => `${(item.loc || []).filter((v: string) => v !== 'body').join(' / ')}：${item.msg || '填写有误'}`).join('；')
+      : `请求失败 (${response.status})`;
+    const hint = response.status === 409 ? ' 配置可能已更新或有任务正在执行，请刷新核对后重试；当前表单已保留。' : '';
+    throw new Error(detail + hint);
+  }
   return result;
+  } catch (error) {
+    if (controller.signal.aborted) throw new Error('请求超时。写入操作可能仍在服务器执行，请先刷新记录确认结果，再决定是否重试。');
+    if (error instanceof TypeError) throw new Error('无法连接本地服务，请检查 admin-web 是否仍在运行，然后重试。');
+    throw error;
+  } finally { clearTimeout(timer); }
 }
 export const remote = (
   path: string,

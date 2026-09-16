@@ -177,6 +177,7 @@ def create_local_app(root=None, connection=None):
             "csrf": csrf,
             "url": connection.url,
             "credential_configured": bool(connection.token),
+            "credential_persistence_available": os.name == "nt",
             "encrypted": connection.url.startswith("https:"),
         }
 

@@ -9,9 +9,12 @@ export function Capability({
   children: ReactNode;
 }) {
   const [value, setValue] = useState<Dict | null>(null),
-    [error, setError] = useState("");
+    [error, setError] = useState(""),
+    [attempt, setAttempt] = useState(0);
   useEffect(() => {
     let active = true;
+    setError("");
+    setValue(null);
     remote("/cloud/capabilities")
       .then((v) => {
         if (active) setValue(v);
@@ -22,8 +25,8 @@ export function Capability({
     return () => {
       active = false;
     };
-  }, []);
-  if (error) return <p role="alert">无法检测服务器能力：{error}</p>;
+  }, [attempt, name]);
+  if (error) return <div className="notice error" role="alert"><p>无法检测服务器能力：{error}</p><button className="secondary" onClick={() => setAttempt(v => v + 1)}>重试检测</button></div>;
   if (!value) return <p>正在检测接口能力…</p>;
   if (!value[name])
     return (

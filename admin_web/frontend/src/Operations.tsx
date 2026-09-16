@@ -1,6 +1,7 @@
+import { operationLabel, localTime } from "./operation-labels";
 import { SandboxDetail } from "./SandboxDetail";
 import { RecoverySettings } from "./RecoverySettings";
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { RefreshCw, Search } from "lucide-react";
 import { remote, Dict } from "./api";
 
@@ -13,42 +14,22 @@ export function Operations() {
     [error, setError] = useState(""),
     [busy, setBusy] = useState(false),
     [job, setJob] = useState<Dict | null>(null);
-  async function reload() {
+  const sequence = useRef(0);
+  const refreshing = useRef(false);
+  const reload = useCallback(async () => {
+    const current = ++sequence.current;
+    refreshing.current = true;
     try {
-      setData(
-        await remote(
-          `/cloud/admin/sandboxes?q=${encodeURIComponent(query)}&status=${encodeURIComponent(filter)}&offset=${offset}&limit=25`,
-        ),
-      );
-      setError("");
-    } catch (e: any) {
-      setError(e.message);
-    }
-  }
-  useEffect(() => {
-    let disposed = false;
-    const refresh = async () => {
-      try {
-        const result = await remote(
-          `/cloud/admin/sandboxes?q=${encodeURIComponent(query)}&status=${encodeURIComponent(filter)}&offset=${offset}&limit=25`,
-        );
-        if (!disposed) {
-          setData(result);
-          setError("");
-        }
-      } catch (e: any) {
-        if (!disposed) setError(e.message);
-      }
-    };
-    void refresh();
-    const timer = setInterval(() => {
-      if (!document.hidden) void refresh();
-    }, 5000);
-    return () => {
-      disposed = true;
-      clearInterval(timer);
-    };
+      const result = await remote(`/cloud/admin/sandboxes?q=${encodeURIComponent(query)}&status=${encodeURIComponent(filter)}&offset=${offset}&limit=25`);
+      if (current === sequence.current) { setData(result); setError(''); }
+    } catch (e: any) { if (current === sequence.current) setError(e.message); }
+    finally { if (current === sequence.current) refreshing.current = false; }
   }, [query, filter, offset]);
+  useEffect(() => {
+    const debounce = setTimeout(() => void reload(), 200);
+    const timer = setInterval(() => { if (!document.hidden && !refreshing.current) void reload(); }, 5000);
+    return () => { ++sequence.current; refreshing.current = false; clearTimeout(debounce); clearInterval(timer); };
+  }, [reload]);
   useEffect(() => {
     if (!job?.id) return;
     let disposed = false;
@@ -144,7 +125,7 @@ export function Operations() {
         >
           <option value="">全部状态</option>
           {["ready", "unhealthy", "stopped", "creating", "missing"].map((s) => (
-            <option key={s}>{s}</option>
+            <option key={s} value={s}>{operationLabel(s)}</option>
           ))}
         </select>
       </div>
@@ -169,13 +150,13 @@ export function Operations() {
             <p className="muted">
               容器：{row.container_id || "未创建或已回收"}
             </p>
-            <p className="muted">最近活动：{row.last_active_at}</p>
+            <p className="muted">最近活动：{localTime(row.last_active_at)}</p>
             {row.recovery?.reason && (
               <p className="notice">{row.recovery.reason}</p>
             )}
           </div>
           <span className="badge">
-            {row.status}
+            {operationLabel(row.status)}
             {row.desired_state === "stopped" ? " · 人工停止" : ""}
           </span>
           <div className="actions">
@@ -188,7 +169,7 @@ export function Operations() {
             {["start", "stop", "restart"].map((action) => (
               <button
                 key={action}
-                disabled={busy}
+                disabled={busy || (action === "start" ? row.status === "ready" || row.status === "creating" : ["stopped", "missing"].includes(row.status))}
                 className="secondary"
                 onClick={() => operate(row, action)}
               >
@@ -203,7 +184,7 @@ export function Operations() {
         </div>
       ))}
       {!data.items.length && (
-        <p className="muted">没有匹配的沙箱；首次聊天时按需创建。</p>
+        <div className="muted"><p>{query || filter ? "没有符合当前筛选条件的沙箱。" : "暂无沙箱，首次聊天时按需创建。"}</p>{(query || filter) && <button className="secondary" onClick={() => { setQuery(""); setFilter(""); setOffset(0); }}>清除筛选</button>}</div>
       )}
       <div className="actions">
         <button
@@ -213,7 +194,7 @@ export function Operations() {
           上一页
         </button>
         <span>
-          {offset + 1}–{Math.min(offset + 25, data.total)} / {data.total}
+          {data.total ? offset + 1 : 0}–{Math.min(offset + 25, data.total)} / {data.total}
         </span>
         <button
           disabled={offset + 25 >= data.total}

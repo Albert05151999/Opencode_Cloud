@@ -789,13 +789,13 @@ test("Agent form JSON comes from the server compiler and updates without saving"
   await page.goto("/admin");
   await page.getByRole("button", { name: "Agents", exact: true }).click();
   await page.getByRole("button", { name: "配置 Agent", exact: true }).click();
-  await expect(page.locator(".form-config-preview .json-view")).toContainText(
+  await expect(page.locator(".form-config-preview .config-json").filter({ has: page.getByRole("heading", { name: "opencode.json · 当前表单（未保存）", exact: true }) }).locator(".json-view")).toContainText(
     "cloud-model-gateway/coding-fast",
   );
   await page
     .getByLabel("小模型（可选）", { exact: true })
     .selectOption("coding-fast");
-  await expect(page.locator(".form-config-preview .json-view")).toContainText(
+  await expect(page.locator(".form-config-preview .config-json").filter({ has: page.getByRole("heading", { name: "opencode.json · 当前表单（未保存）", exact: true }) }).locator(".json-view")).toContainText(
     '"small_model": "coding-fast"',
   );
   expect(saves).toBe(0);
@@ -842,20 +842,25 @@ test("sandbox search and restart use the operations API", async ({ page }) => {
 });
 
 test("logs filter by module and job and open correlated trace", async ({ page }) => {
+  let query: URL | undefined;
   await page.route("**/remote/cloud/logs/modules", r => r.fulfill({json: {items: ["operations"]}}));
   await page.route("**/remote/cloud/logs?*", r => {
     const url = new URL(r.request().url());
-    expect(url.searchParams.get("module")).toBe("operations");
-    expect(url.searchParams.get("job_id")).toBe("job_demo");
-    return r.fulfill({json: {items: [{module: "operations", action: "release.completed", timestamp: "2026-09-12", trace_id: "trace_demo", job_id: "job_demo", level: "INFO"}]}});
+    if (!url.searchParams.get("job_id")) return r.fulfill({json: {items: []}});
+    query = url;
+    return r.fulfill({json: {items: [{module: "operations", action: "release.completed", timestamp: "2026-09-12", trace_id: "1234567890abcdef1234567890abcdef", job_id: "job_demo", level: "INFO"}]}});
   });
-  await page.route("**/remote/cloud/traces/trace_demo", r => r.fulfill({json: {trace_id: "trace_demo", spans: [{module: "operations", span_id: "span_demo", action: "release.completed"}], events: []}}));
+  await page.route("**/remote/cloud/traces/1234567890abcdef1234567890abcdef", r => r.fulfill({json: {trace_id: "1234567890abcdef1234567890abcdef", spans: [{module: "operations", span_id: "span_demo", action: "release.completed"}], events: []}}));
   await page.goto("/admin");
   await page.getByRole("button", {name: "日志与调用链", exact: true}).click();
+  await page.getByRole("tab", {name: "模块日志", exact: true}).click();
   await page.getByLabel("日志模块").selectOption("operations");
   await page.getByLabel("任务 ID", {exact: true}).fill("job_demo");
   await page.getByRole("button", {name: "查询", exact: true}).click();
-  await page.getByRole("button", {name: "查看调用链"}).click();
-  await expect(page.getByRole("region", {name: "调用链详情"})).toContainText("span_demo");
-  await expect(page.getByRole("region", {name: "调用链详情"})).toContainText("未知 / 未提供");
+  await page.getByRole("button", {name: "trace 1234567890ab"}).click();
+  expect(query?.searchParams.get("module")).toBe("operations");
+  expect(query?.searchParams.get("job_id")).toBe("job_demo");
+  await expect(page.getByRole("region", {name: "调用链详情"})).toContainText("瞬时事件 / 未记录耗时");
+  await page.getByRole("region", {name: "调用链详情"}).getByRole("button").click();
+  await expect(page.getByText("0 条事件 · span span_demo", {exact:true})).toBeVisible();
 });

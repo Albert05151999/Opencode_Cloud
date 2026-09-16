@@ -15,6 +15,7 @@ export function ResourceTransfer({ onChanged }: { onChanged: () => void }) {
     [busy, setBusy] = useState(false),
     [result, setResult] = useState("");
   async function inspect(file: File) {
+    if (file.size > 20 * 1024 * 1024) { setPreview(null); setError("文件超过 20 MiB，请缩小资源包后重新上传。"); return; }
     setBusy(true);
     setError("");
     setResult("");
@@ -42,6 +43,7 @@ export function ResourceTransfer({ onChanged }: { onChanged: () => void }) {
   async function inspectLocal() {
     setBusy(true);
     setError("");
+    setResult("");
     setPreview(null);
     try {
       const data = await request("/local/imports/preview", "POST", {

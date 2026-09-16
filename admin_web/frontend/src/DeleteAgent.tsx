@@ -1,3 +1,4 @@
+import { waitForPublish } from "./publishing";
 import { useState } from "react";
 import { Dict, remote } from "./api";
 
@@ -35,8 +36,10 @@ export function DeleteAgent({
       {error && <p role="alert">{error}</p>}
       {preview && (
         <div className="modal-backdrop">
-          <section className="modal">
+          <section className="modal" role="dialog" aria-modal="true" aria-label="永久删除 Agent">
             <h2>永久删除 Agent</h2>
+            {busy && <p className="notice" role="status">删除任务处理中，正在等待服务器确认结果…</p>}
+            {error && <p className="notice error" role="alert">{error}</p>}
             <p>
               将删除 {id} 的配置历史、会话和工作区；全局资源保留。操作不可撤销。
             </p>
@@ -69,7 +72,8 @@ export function DeleteAgent({
                 onClick={async () => {
                   setBusy(true);
                   try {
-                    await remote(
+                    setError("");
+                    const result = await remote(
                       `/cloud/admin/agents/${encodeURIComponent(id)}/delete`,
                       "POST",
                       {
@@ -78,6 +82,7 @@ export function DeleteAgent({
                         confirmation,
                       },
                     );
+                    if (result.job_id) await waitForPublish(result.job_id, "删除");
                     setPreview(null);
                     onChanged();
                   } catch (e: any) {
